@@ -18,6 +18,7 @@
 - [Repository Structure](#repository-structure)
 - [Host Runtime Structure](#host-runtime-structure)
 - [Requirements](#requirements)
+- [Clone the Repository](#clone-the-repository)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [GitHub Authentication](#github-authentication)
@@ -342,11 +343,18 @@ The included installer validates Docker, Git, Python 3, Docker daemon access, an
 
 ---
 
-## Installation
+## Clone the Repository
 
 ```bash
 git clone https://github.com/mosabbir-maruf/ai-workstation.git ~/ai-workstation
 cd ~/ai-workstation
+```
+
+---
+
+## Installation
+
+```bash
 ./install.sh
 ```
 
