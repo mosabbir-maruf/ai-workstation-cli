@@ -37,12 +37,21 @@ command -v python3 >/dev/null 2>&1 ||
 # --------------------------------------------------
 # Required Python venv support
 # --------------------------------------------------
-
-if ! python3 -m venv --help >/dev/null 2>&1; then
+# NOTE: `python3 -m venv --help` can succeed on Debian/Ubuntu even when
+# ensurepip/pip is missing, producing a venv with "No module named pip".
+# Test the real functionality instead.
+if ! python3 -c 'import venv, ensurepip' >/dev/null 2>&1; then
     echo "Installing Python venv support..."
+    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     sudo apt-get update
-    sudo apt-get install -y python3-venv
+    # Versioned package first (e.g. python3.12-venv on Ubuntu 24.04),
+    # then fall back to the generic metapackage.
+    sudo apt-get install -y "python${PYVER}-venv" 2>/dev/null \
+        || sudo apt-get install -y python3-venv
 fi
+
+python3 -c 'import venv, ensurepip' >/dev/null 2>&1 ||
+    die "Python venv/ensurepip is still unavailable. Install it manually, e.g.: sudo apt-get install -y python3-venv python3-pip"
 
 # --------------------------------------------------
 # Directory structure
@@ -86,14 +95,32 @@ fi
 # Python virtual environment
 # --------------------------------------------------
 
+# Recreate a broken venv from a previous partial run (exists but has no pip).
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    if ! "$ROOT/.venv/bin/python" -m pip --version >/dev/null 2>&1; then
+        echo "Existing .venv has no pip — recreating..."
+        rm -rf "$ROOT/.venv"
+    else
+        echo "✓ Python virtual environment already exists"
+    fi
+fi
+
 if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
     echo "Creating Python virtual environment..."
 
+    rm -rf "$ROOT/.venv"
     python3 -m venv "$ROOT/.venv"
 
+    # Some minimal images still produce a venv without pip; repair it.
+    if ! "$ROOT/.venv/bin/python" -m pip --version >/dev/null 2>&1; then
+        echo "Bootstrapping pip with ensurepip..."
+        "$ROOT/.venv/bin/python" -m ensurepip --upgrade
+    fi
+
+    "$ROOT/.venv/bin/python" -m pip --version >/dev/null 2>&1 ||
+        die "pip is unavailable in .venv even after ensurepip. Run: rm -rf \"$ROOT/.venv\"; sudo apt-get install -y python3-venv python3-pip; ./install.sh"
+
     echo "✓ Python virtual environment created"
-else
-    echo "✓ Python virtual environment already exists"
 fi
 
 # --------------------------------------------------
