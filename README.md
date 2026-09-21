@@ -345,6 +345,7 @@ The included installer validates Docker, Git, Python 3, Docker daemon access, an
 ## Installation
 
 ```bash
+git clone https://github.com/mosabbir-maruf/ai-workstation.git ~/ai-workstation
 cd ~/ai-workstation
 ./install.sh
 ```
