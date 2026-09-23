@@ -54,6 +54,14 @@ start_dsh() {
 
     echo "Starting DSH..."
 
+    # Pin the invoking directory to the active project so the workspace
+    # picker opens on project files instead of the sandbox HOME
+    # (which holds only hidden files).
+    cd /workspace 2>/dev/null || {
+        echo "ERROR: workspace mount missing" >&2
+        return 1
+    }
+
     # Extra authorities the DSH /api browser-trust fence accepts
     # (e.g. the public Cloudflare hostname). Space/comma-separated
     # via DSH_TRUSTED_HOSTS; unset means local-only trust.
