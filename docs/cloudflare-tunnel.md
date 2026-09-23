@@ -68,6 +68,19 @@ ai run
 ai preview
 ```
 
+## DSH settings are loopback-only
+
+DSH's Settings pages (Models, Plugins, Agent presets) load **only** on a loopback page (`127.x`, `localhost`, `[::1]`). On any other address — tunnel hostname, LAN IP, reverse proxy — the browser client itself refuses (`Loading the provider directory failed: settings are unavailable in this browser`). This is upstream design, not a misconfiguration: no `--trusted-host`, tunnel setting, header rewrite, or upgrade changes it. The server fence (`--trusted-host`, wired automatically by `ai tunnel setup`) covers the API; this separate client gate covers the settings UI.
+
+What works from anywhere: chat, sessions, workspaces, provider *use*. What needs loopback once: entering/changing API keys and credentials.
+
+Workarounds (one time):
+
+1. **Via SSH (recommended):** on your machine run `ssh -N -L 4090:<container-ip>:4091 <vps>` (container IP from `ai preview`), open `http://127.0.0.1:4090` (+ token from `ai preview`'s `DSH open:` line) → Settings → Models → Apply. Keys persist server-side.
+2. **File edit:** keys live in `~/ai-workstation/runtime/dsh/settings.yaml` on the VPS (hot-reloaded, no restart). Configure once via method 1, then `cat` that file as the schema template for future edits.
+
+Do not chase this error with tunnel, Access, WAF, or header changes — verified end to end: same browser gets `200 OK` on the API through the tunnel while the settings pane still refuses. That combination *is* the signature of this gate.
+
 ## Keep the app port in sync
 
 No extra command needed. `ai preview` auto-detects the listening app port and prints the Anywhere URLs every time. If the port changed, it also prints the one dashboard click required (tunnel -> Public hostnames -> edit the app hostname to the new port). Ingress lives in the dashboard, so the port edit happens there — nothing restarts, nothing reloads.

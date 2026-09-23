@@ -750,6 +750,9 @@ ai preview   # prints Anywhere URLs, flags any dashboard port edit
 
 Result: `https://app.example.com` and `https://dsh.example.com`, each behind a Cloudflare Access policy.
 
+> [!IMPORTANT]
+> DSH's Settings pages (Models, Plugins) are loopback-only by upstream design: on any non-`localhost` address the browser client refuses to load them (`settings are unavailable in this browser`), and no server or tunnel setting changes that. Enter API keys **once** via the SSH address (`http://127.0.0.1:4090`, token from `ai preview`), then use the public URL for everything else (chat, sessions, workspaces). Details: [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md#dsh-settings-are-loopback-only).
+
 ### Bind address (automatic)
 
 `ai run` binds the dev server to `0.0.0.0` automatically so both SSH preview and the tunnel can reach it — no `package.json` edits needed:
@@ -1023,6 +1026,8 @@ ai preview
 ```
 
 Open `https://app.example.com` and `https://dsh.example.com` from anywhere.
+
+First API key entry (one time): DSH Settings pages only load on loopback, so enter keys via SSH once — Mac terminal `ssh -N -L 4090:<container-ip>:4091 <vps>` (IP from `ai preview`), then `http://127.0.0.1:4090` (+ token from `ai preview`) → Settings → Models → Apply. Daily use stays on the public URLs.
 
 ### New project with anywhere access (one time per project)
 
