@@ -138,7 +138,7 @@ echo "Checking Python dependencies..."
 "$ROOT/.venv/bin/python" -m pip install \
     --disable-pip-version-check \
     --quiet \
-    PyJWT
+    "PyJWT[crypto]"
 
 echo "✓ PyJWT ready"
 
@@ -169,6 +169,9 @@ echo "Running validation..."
 
 "$ROOT/.venv/bin/python" -c 'import jwt' >/dev/null ||
     die "PyJWT installation failed."
+
+"$ROOT/.venv/bin/python" -c 'from jwt.api_jws import PyJWS; PyJWS().get_algorithm_by_name("RS256")' >/dev/null ||
+    die "PyJWT cryptography backend (RS256) is unavailable. Run: .venv/bin/pip install 'PyJWT[crypto]'"
 
 [[ -d "$ROOT/runtime/dsh" ]] ||
     die "runtime/dsh missing."
