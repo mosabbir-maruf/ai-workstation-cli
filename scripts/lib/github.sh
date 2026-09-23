@@ -60,6 +60,18 @@ github_setup() {
     echo
     read -r -p "Private key (.pem) path: " pem_path
 
+    # `read` does not perform tilde expansion, so expand a leading ~/ manually.
+    # Also tolerate surrounding quotes from copy-paste.
+    pem_path="${pem_path%\"}"
+    pem_path="${pem_path#\"}"
+    pem_path="${pem_path%\'}"
+    pem_path="${pem_path#\'}"
+    if [[ "$pem_path" == "~/"* ]]; then
+        pem_path="$HOME/${pem_path:2}"
+    elif [[ "$pem_path" == "~" ]]; then
+        pem_path="$HOME"
+    fi
+
     [[ -f "$pem_path" ]] ||
         die "PEM file not found: $pem_path"
 
