@@ -490,6 +490,23 @@ scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pe
   mosabbir-cloud:/tmp/github-app.pem
 ```
 
+> [!NOTE]
+> On macOS, if `scp` fails with `Operation not permitted` for a file under `~/Downloads`, macOS privacy is blocking Terminal from reading Downloads. Fix 1 (fastest, no settings change): move it with Finder.
+>
+> 1. Open Finder -> Downloads.
+> 2. Copy `ai-dev-workstation.2026-09-23.private-key.pem`.
+> 3. Paste it in your Home folder, for example to `~` or `~/.ssh/`.
+> 4. Then from Terminal:
+>
+> ```bash
+> chmod 600 ~/ai-dev-workstation.2026-09-23.private-key.pem
+>
+> scp ~/ai-dev-workstation.2026-09-23.private-key.pem \
+>   mosabbir-cloud:~/ai-workstation/secrets/github-app.pem
+> ```
+>
+> If you pasted to `~/.ssh/`, adjust the path accordingly. Do not use `cp` in Terminal to move it — the same block will hit. Use Finder drag/copy.
+
 Then, on the VPS:
 
 ```bash
