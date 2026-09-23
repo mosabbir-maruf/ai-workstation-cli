@@ -27,6 +27,7 @@
 - [Project Lifecycle](#project-lifecycle)
 - [Harness and DSH Lifecycle](#harness-and-dsh-lifecycle)
 - [Preview and SSH Tunneling](#preview-and-ssh-tunneling)
+- [Anywhere Access via Cloudflare Tunnel](#anywhere-access-via-cloudflare-tunnel)
 - [Git Workflow](#git-workflow)
 - [Cache Management](#cache-management)
 - [State Backup and Recovery](#state-backup-and-recovery)
@@ -263,7 +264,7 @@ ai-workstation/
 │   │   ├── feature_request.yml      # Structured feature request form
 │   │   └── config.yml               # Issue template configuration
 │   ├── workflows/
-│   │   └── image.yml                # ARM64 GHCR build & publish workflow
+│   │   └── image.yml                # Multi-arch GHCR build & publish workflow
 │   └── pull_request_template.md     # PR submission template
 │
 ├── broker/
@@ -273,7 +274,7 @@ ai-workstation/
 │   └── projects.yml                 # Project configuration registry
 │
 ├── docker/
-│   ├── Dockerfile                   # Base ARM64 workstation image
+│   ├── Dockerfile                   # Base multi-arch workstation image
 │   ├── compose.yml                 # Runtime/security configuration
 │   ├── entrypoint.sh               # Container bootstrap & DSH setup
 │   ├── app-runner.sh               # App process runner
@@ -284,7 +285,9 @@ ai-workstation/
     ├── ai                           # Main CLI
     ├── github-app-credential-helper # Host-side credential helper
     └── lib/
-        └── github.sh                # GitHub App/broker helpers
+        ├── github.sh                # GitHub App/broker helpers
+        ├── tunnel.sh                # Cloudflare Tunnel helpers
+        └── ports.sh                 # Shared container port detector
 ```
 
 > [!NOTE]
@@ -304,9 +307,11 @@ ai-workstation/
 │   │   ├── npm-global/
 │   │   ├── app/
 │   │   ├── harness/
-│   │   └── github-broker/
+│   │   ├── github-broker/
+│   │   └── cloudflared/           # Tunnel config (optional)
 │   └── secrets/
-│       └── github-app.pem
+│       ├── github-app.pem
+│       └── cloudflared-<tunnel-id>.json  # Tunnel credentials (optional)
 │
 └── projects/
     ├── project-a/.git
@@ -389,15 +394,25 @@ IMAGE=ghcr.io/mosabbir-maruf/ai-workstation:latest
 DSH_VERSION=0.1.2-rc.1
 ACTIVE_PROJECT=
 ACTIVE_PROJECT_PATH=
+AI_WORKSTATION_ROOT=
+GITHUB_APP_ID=
+GITHUB_INSTALLATION_ID=
+GITHUB_BROKER_SOCKET=
+GITHUB_BROKER_GID=
+CLOUDFLARED_TUNNEL_ID=
+CLOUDFLARED_APP_HOSTNAME=
+CLOUDFLARED_DSH_HOSTNAME=
+CLOUDFLARED_APP_PORT=
 ```
 
-The CLI also maintains GitHub App/broker-related values locally when configured.
+The CLI also maintains GitHub App/broker and tunnel-related values locally when configured.
 
 ### Rules
 
 - Keep `.env` private.
 - Never commit `.env`.
 - Keep `secrets/github-app.pem` private.
+- Keep `secrets/cloudflared-*.json` private.
 - Prefer trusted/pinned image references for controlled deployments.
 - Pin `DSH_VERSION` when deterministic behavior is required.
 
@@ -718,6 +733,17 @@ ai github status
 ai github test
 ```
 
+### Tunnel (anywhere access, optional)
+
+```bash
+ai tunnel setup
+ai tunnel sync [port]
+ai tunnel status
+ai tunnel start
+ai tunnel stop
+ai tunnel logs
+```
+
 ### State
 
 ```bash
@@ -811,6 +837,8 @@ Current fixed host bindings include:
 ```text
 127.0.0.1:3000
 127.0.0.1:3001
+127.0.0.1:5173
+127.0.0.1:8080
 127.0.0.1:8000
 127.0.0.1:4090 -> container:4091
 ```
@@ -841,6 +869,98 @@ URLs:
 ```
 
 The container IP and app ports are runtime values and must not be hard-coded.
+
+---
+
+## Anywhere Access via Cloudflare Tunnel
+
+SSH tunneling is the default (zero public attack surface). Cloudflare Tunnel is the opt-in path for using the app and DSH from anywhere without running SSH from your own machine.
+
+How it stays fast and safe:
+
+- `cloudflared` runs on the VPS host, not inside the 512 MB workstation container, so it adds no container memory/CPU pressure.
+- The origin is always local (`http://127.0.0.1:<port>`), so there is no extra network hop and no dependency on the changing container IP.
+- A named tunnel (stable DNS) with QUIC transport reuses a small number of long-lived connections instead of opening one per request.
+- Development ports stay bound to `127.0.0.1`; Cloudflare is the only ingress. Both hostnames must sit behind a Cloudflare Access policy.
+
+### Prerequisites
+
+1. A domain with DNS on Cloudflare.
+2. One named tunnel plus two DNS routes (run once from any machine with `cloudflared`):
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create ai-workstation
+cloudflared tunnel route dns ai-workstation app.example.com
+cloudflared tunnel route dns ai-workstation dsh.example.com
+cloudflared tunnel list  # note the Tunnel ID (UUID)
+```
+
+3. In Cloudflare Zero Trust -> Access, add an application policy for `app.example.com` and `dsh.example.com` (for example, email OTP or Google login). Do not skip this: the dev server and DSH have no login of their own.
+
+### Setup (on the VPS)
+
+```bash
+ai tunnel setup
+ai tunnel status
+```
+
+`ai tunnel setup` asks for the Tunnel ID, the credentials JSON path (copied to `secrets/cloudflared-<id>.json` with `600`), both hostnames, and the app local port (defaults to the detected app port). It writes `runtime/cloudflared/config.yml`, stores `CLOUDFLARED_*` values in `.env`, installs `cloudflared` if missing (amd64/arm64 `.deb`), and starts the `ai-cloudflared` systemd service with QUIC transport.
+
+Result:
+
+```text
+App : https://app.example.com
+DSH : https://dsh.example.com
+```
+
+### Keep the app port in sync
+
+No extra command needed. `ai preview` auto-detects the listening app port and, when it differs from the tunnel config, runs the equivalent of `ai tunnel sync <port>` (rewrites the ingress rule and restarts the service) before printing the URLs.
+
+```bash
+ai preview
+```
+
+Manual sync is only needed if you want to point the tunnel at a port without running preview:
+
+```bash
+ai tunnel sync 5173
+ai tunnel status
+```
+
+### Manage
+
+```bash
+ai tunnel status
+ai tunnel start
+ai tunnel stop
+ai tunnel logs
+```
+
+### Bind address (automatic)
+
+`ai run` binds the dev server to `0.0.0.0` automatically so both SSH preview and the tunnel can reach it — no `package.json` edits needed:
+
+- Vite / Astro / SvelteKit / Nuxt / Angular: appends `--host 0.0.0.0`.
+- Next.js: appends `-H 0.0.0.0`.
+- Your own `--host` / `-H` / `0.0.0.0` in the `dev` script always wins (never overridden).
+- Backend apps (Express / Nest / Fastify / Hono / ...): no flag is injected. These bind all interfaces by default or respect the `HOST=0.0.0.0` environment the workstation already exports — just make sure the code does not hard-code `localhost` (use `process.env.HOST` when a host is specified).
+- Non-JS backends (Python / Go / ...) are not started by `ai run`: bind `0.0.0.0` manually (Flask `--host=0.0.0.0`, uvicorn `--host 0.0.0.0`, Django `runserver 0.0.0.0:8000` plus `ALLOWED_HOSTS`).
+
+`ai run` prints the active mode: `Bind: auto (--host 0.0.0.0)` or `Bind: project config`.
+
+### Framework hostname checks
+
+Tunnels change the `Host` header, so allow the public hostname in the dev server:
+
+- Vite: `server.allowedHosts: ['app.example.com']` (or `true` for trusted previews).
+- Next.js: `experimental.allowedDevOrigins: ['https://app.example.com']`.
+- Other servers: equivalent allowed-hosts / trusted-hosts setting.
+
+### When not to use it
+
+Prefer plain SSH tunneling for daily work on trusted machines. Use the Cloudflare path only when you genuinely need access without your own SSH client (another device, another network).
 
 ---
 
@@ -1162,6 +1282,17 @@ ai github test
 
 New installs get this automatically via `./install.sh`.
 
+### Tunnel fails or serves the wrong port
+
+```bash
+ai tunnel status
+sudo journalctl -u ai-cloudflared -n 50
+ai preview
+ai tunnel sync [port]
+```
+
+Common causes: DNS route missing (`cloudflared tunnel route dns`), dev server blocking the public hostname (allow it in Vite/Next.js), or a missing Cloudflare Access policy. A stale app port fixes itself on the next `ai preview` (auto-sync).
+
 ### Preview fails
 
 ```bash
@@ -1200,6 +1331,8 @@ For deterministic deployments, use a SHA-tagged image.
 [ ] Only active project is mounted at /workspace
 [ ] .env is not tracked
 [ ] GitHub private key is not tracked
+[ ] Cloudflare Tunnel credentials are not tracked
+[ ] Cloudflare Access policy protects tunnel hostnames
 [ ] DSH credentials are protected
 [ ] GitHub authentication uses broker/App flow
 [ ] Development ports are localhost-only
@@ -1305,6 +1438,14 @@ GITHUB
   ai github setup
   ai github status
   ai github test
+
+TUNNEL
+  ai tunnel setup
+  ai tunnel sync [port]
+  ai tunnel status
+  ai tunnel start
+  ai tunnel stop
+  ai tunnel logs
 
 STATE
   ai state export

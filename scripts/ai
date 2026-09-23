@@ -7,6 +7,8 @@ COMPOSE_FILE="$ROOT/docker/compose.yml"
 PROJECTS_DIR="$HOME/projects"
 RUNTIME_DIR="$ROOT/runtime"
 GITHUB_LIB="$ROOT/scripts/lib/github.sh"
+TUNNEL_LIB="$ROOT/scripts/lib/tunnel.sh"
+PORTS_LIB="$ROOT/scripts/lib/ports.sh"
 
 mkdir -p "$PROJECTS_DIR" "$RUNTIME_DIR"
 
@@ -36,6 +38,7 @@ load_env() {
 save_env() {
     local image dsh_version workstation_root
     local github_app_id github_installation_id github_broker_gid github_broker_socket
+    local tunnel_id tunnel_app_host tunnel_dsh_host tunnel_app_port
 
     image="$(grep '^IMAGE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     dsh_version="$(grep '^DSH_VERSION=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -45,6 +48,11 @@ save_env() {
     github_installation_id="$(grep '^GITHUB_INSTALLATION_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     github_broker_gid="$(grep '^GITHUB_BROKER_GID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     github_broker_socket="$(grep '^GITHUB_BROKER_SOCKET=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+
+    tunnel_id="$(grep '^CLOUDFLARED_TUNNEL_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    tunnel_app_host="$(grep '^CLOUDFLARED_APP_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    tunnel_dsh_host="$(grep '^CLOUDFLARED_DSH_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    tunnel_app_port="$(grep '^CLOUDFLARED_APP_PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
     image="${image:-${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation:latest}}"
     dsh_version="${dsh_version:-${DSH_VERSION:-0.1.2-rc.1}}"
@@ -60,6 +68,10 @@ GITHUB_APP_ID=$github_app_id
 GITHUB_INSTALLATION_ID=$github_installation_id
 GITHUB_BROKER_SOCKET=$github_broker_socket
 GITHUB_BROKER_GID=$github_broker_gid
+CLOUDFLARED_TUNNEL_ID=$tunnel_id
+CLOUDFLARED_APP_HOSTNAME=$tunnel_app_host
+CLOUDFLARED_DSH_HOSTNAME=$tunnel_dsh_host
+CLOUDFLARED_APP_PORT=$tunnel_app_port
 EOF2
 }
 compose() {
@@ -394,6 +406,43 @@ cmd_run() {
     local manager
     manager="$(detect_package_manager)"
 
+    # Central 0.0.0.0 handling: dev servers default to localhost inside the
+    # container, which is unreachable from the host/tunnel. Auto-append the
+    # framework's host flag unless the project's own dev script already
+    # configures a host. Backends (Express/Nest/Fastify/...) typically bind
+    # all interfaces by default or respect $HOST, so no flag is needed there.
+    local host_args=""
+    local bind_note="project config"
+    local dev_script=""
+    dev_script="$(grep -o '"dev"[[:space:]]*:[[:space:]]*"[^"]*"' "$ACTIVE_PROJECT_PATH/package.json" 2>/dev/null || true)"
+
+    if [[ "$dev_script" == *"--host"* || "$dev_script" == *"0.0.0.0"* || "$dev_script" == *"-H "* ]]; then
+        host_args=""
+        bind_note="project config (custom host found)"
+    else
+        # One glob pass: Vite/Astro/SvelteKit/Nuxt share --host 0.0.0.0,
+        # Next.js uses -H, Angular is a plain file check.
+        shopt -s nullglob
+        local host_flag_cfgs=(
+            "$ACTIVE_PROJECT_PATH"/vite.config.*
+            "$ACTIVE_PROJECT_PATH"/astro.config.*
+            "$ACTIVE_PROJECT_PATH"/svelte.config.*
+            "$ACTIVE_PROJECT_PATH"/nuxt.config.*
+        )
+        local next_cfgs=("$ACTIVE_PROJECT_PATH"/next.config.*)
+        shopt -u nullglob
+
+        if [[ "${#host_flag_cfgs[@]}" -gt 0 ]]; then
+            host_args="--host 0.0.0.0"
+        elif [[ "${#next_cfgs[@]}" -gt 0 ]]; then
+            host_args="-H 0.0.0.0"
+        elif [[ -f "$ACTIVE_PROJECT_PATH/angular.json" ]]; then
+            host_args="--host 0.0.0.0"
+        fi
+
+        [[ -n "$host_args" ]] && bind_note="auto ($host_args)"
+    fi
+
     local command
     case "$manager" in
         npm)  command='npm run dev' ;;
@@ -402,6 +451,8 @@ cmd_run() {
         bun)  command='bun run dev' ;;
         *) die "Unsupported package manager: $manager" ;;
     esac
+
+    [[ -n "$host_args" ]] && command="$command -- $host_args"
 
     mkdir -p "$APP_RUNTIME_DIR"
     chmod 700 "$APP_RUNTIME_DIR"
@@ -440,6 +491,7 @@ cmd_run() {
 
     echo "Starting $ACTIVE_PROJECT..."
     echo "Package manager: $manager"
+    echo "Bind: $bind_note"
     echo "Command: $command"
 
     docker exec -d ai-workstation \
@@ -596,6 +648,29 @@ cmd_shell() {
 cmd_preview() {
     require_active
 
+    preview_tunnel_section() {
+        local current_port="${1:-}"
+
+        [[ -f "${TUNNEL_LIB:-}" && -n "${CLOUDFLARED_TUNNEL_ID:-}" && -n "${CLOUDFLARED_APP_HOSTNAME:-}" && -n "${CLOUDFLARED_DSH_HOSTNAME:-}" ]] ||
+            return 0
+
+        if [[ -n "$current_port" && "$current_port" != "${CLOUDFLARED_APP_PORT:-}" ]]; then
+            echo
+            echo "Tunnel out of sync (${CLOUDFLARED_APP_PORT:-none} -> $current_port), syncing..."
+
+            if bash "$TUNNEL_LIB" sync "$current_port"; then
+                load_env
+            else
+                echo "Tunnel sync failed. Run: ai tunnel sync $current_port" >&2
+            fi
+        fi
+
+        echo
+        echo "Anywhere URLs:"
+        echo "  App : https://${CLOUDFLARED_APP_HOSTNAME}"
+        echo "  DSH : https://${CLOUDFLARED_DSH_HOSTNAME}"
+    }
+
     echo "=== Preview ==="
     echo
     echo "Project: $ACTIVE_PROJECT"
@@ -623,68 +698,9 @@ cmd_preview() {
 
     local app_ports=""
     if app_running; then
-        app_ports="$(
-            docker exec ai-workstation node -e '
-                const fs = require("fs");
-
-                const files = ["/proc/net/tcp", "/proc/net/tcp6"];
-                const ports = new Set();
-
-                function hexToNumber(value) {
-                    return parseInt(value, 16);
-                }
-
-                for (const file of files) {
-                    let content;
-
-                    try {
-                        content = fs.readFileSync(file, "utf8");
-                    } catch {
-                        continue;
-                    }
-
-                    for (const line of content.trim().split("\n").slice(1)) {
-                        const fields = line.trim().split(/\s+/);
-
-                        if (fields.length < 4)
-                            continue;
-
-                        const localAddress = fields[1];
-                        const state = fields[3];
-
-                        if (state !== "0A")
-                            continue;
-
-                        const parts = localAddress.split(":");
-
-                        if (parts.length !== 2)
-                            continue;
-
-                        const address = parts[0];
-                        const port = hexToNumber(parts[1]);
-
-                        const allInterfaces =
-                            address === "00000000" ||
-                            address === "00000000000000000000000000000000";
-
-                        if (!allInterfaces)
-                            continue;
-
-                        if (port < 1024 || port > 65535)
-                            continue;
-
-                        if (port === 4090 || port === 4091)
-                            continue;
-
-                        ports.add(port);
-                    }
-                }
-
-                process.stdout.write(
-                    [...ports].sort((a, b) => a - b).join(" ")
-                );
-            '
-        )"
+        [[ -f "$PORTS_LIB" ]] ||
+            die "Port detector not found: $PORTS_LIB"
+        app_ports="$(bash "$PORTS_LIB" || true)"
     fi
 
     if [[ -z "$app_ports" ]]; then
@@ -698,6 +714,7 @@ cmd_preview() {
         echo
         echo "DSH tunnel:"
         echo "  ssh -N -L 4090:${container_ip}:4091 mosabbir-cloud"
+        preview_tunnel_section ""
         return 0
     fi
 
@@ -719,11 +736,15 @@ cmd_preview() {
     echo
     echo "URLs:"
 
+    local first_port=""
     for port in $app_ports; do
         echo "  App : http://127.0.0.1:$port"
+        [[ -z "$first_port" ]] && first_port="$port"
     done
 
     echo "  DSH : http://127.0.0.1:4090"
+
+    preview_tunnel_section "$first_port"
 }
 
 cmd_dsh_update() {
@@ -1357,6 +1378,14 @@ GitHub:
   ai github status
   ai github test
 
+Tunnel (anywhere access):
+  ai tunnel setup
+  ai tunnel sync [port]
+  ai tunnel status
+  ai tunnel start
+  ai tunnel stop
+  ai tunnel logs
+
 State:
   ai state export
   ai state import <archive>
@@ -1455,6 +1484,19 @@ case "${1:-}" in
     github)
         shift
         cmd_github "$@"
+        ;;
+    tunnel)
+        shift
+        [[ -f "$TUNNEL_LIB" ]] ||
+            die "Tunnel module not found: $TUNNEL_LIB"
+        case "${1:-}" in
+            setup|sync|status|start|stop|logs)
+                bash "$TUNNEL_LIB" "$@"
+                ;;
+            *)
+                die "Usage: ai tunnel {setup|sync [port]|status|start|stop|logs}"
+                ;;
+        esac
         ;;
     state)
         shift

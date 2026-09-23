@@ -14,6 +14,7 @@ services:
       NPM_CONFIG_PREFIX: /home/sandbox/.npm-global
       PATH: /home/sandbox/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
       DSH_VERSION: ${DSH_VERSION:-0.1.2-rc.1}
+      HOST: 0.0.0.0
 
     volumes:
       - ${ACTIVE_PROJECT_PATH:-/tmp}:/workspace
@@ -26,6 +27,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:3001:3001"
+      - "127.0.0.1:5173:5173"
+      - "127.0.0.1:8080:8080"
       - "127.0.0.1:8000:8000"
       - "127.0.0.1:4090:4091"
 
