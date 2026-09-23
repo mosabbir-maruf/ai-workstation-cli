@@ -1151,6 +1151,17 @@ Check the broker and GitHub App configuration.
 
 Do not copy a PAT or host SSH private key into the workstation as a workaround.
 
+If `ai github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing:
+
+```bash
+~/ai-workstation/.venv/bin/pip install "PyJWT[crypto]"
+~/ai-workstation/.venv/bin/python -c 'from jwt.api_jws import PyJWS; PyJWS().get_algorithm_by_name("RS256"); print("RS256 OK")'
+sudo systemctl restart ai-github-broker
+ai github test
+```
+
+New installs get this automatically via `./install.sh`.
+
 ### Preview fails
 
 ```bash
