@@ -273,6 +273,10 @@ ai-workstation/
 ├── config/
 │   └── projects.yml                 # Project configuration registry
 │
+├── docs/
+│   ├── github-app-setup.md          # GitHub App key walkthrough
+│   └── cloudflare-tunnel.md         # Anywhere-access guide
+│
 ├── docker/
 │   ├── Dockerfile                   # Base multi-arch workstation image
 │   ├── compose.yml                 # Runtime/security configuration
@@ -307,11 +311,10 @@ ai-workstation/
 │   │   ├── npm-global/
 │   │   ├── app/
 │   │   ├── harness/
-│   │   ├── github-broker/
-│   │   └── cloudflared/           # Tunnel config (optional)
+│   │   └── github-broker/
 │   └── secrets/
 │       ├── github-app.pem
-│       └── cloudflared-<tunnel-id>.json  # Tunnel credentials (optional)
+│       └── cloudflared-token  # Tunnel connector token (optional)
 │
 └── projects/
     ├── project-a/.git
@@ -399,7 +402,7 @@ GITHUB_APP_ID=
 GITHUB_INSTALLATION_ID=
 GITHUB_BROKER_SOCKET=
 GITHUB_BROKER_GID=
-CLOUDFLARED_TUNNEL_ID=
+CLOUDFLARED_TOKEN_SET=
 CLOUDFLARED_APP_HOSTNAME=
 CLOUDFLARED_DSH_HOSTNAME=
 CLOUDFLARED_APP_PORT=
@@ -412,7 +415,7 @@ The CLI also maintains GitHub App/broker and tunnel-related values locally when 
 - Keep `.env` private.
 - Never commit `.env`.
 - Keep `secrets/github-app.pem` private.
-- Keep `secrets/cloudflared-*.json` private.
+- Keep `secrets/cloudflared-token` private.
 - Prefer trusted/pinned image references for controlled deployments.
 - Pin `DSH_VERSION` when deterministic behavior is required.
 
@@ -422,129 +425,9 @@ The CLI also maintains GitHub App/broker and tunnel-related values locally when 
 
 GitHub access is brokered through a GitHub App. No PAT or SSH private key is copied into the workstation container.
 
-You need three values:
+Full walkthrough (App creation, private-key generation, copying the key to the VPS, macOS `scp` fix): [docs/github-app-setup.md](docs/github-app-setup.md).
 
-```text
-GitHub App ID
-GitHub Installation ID
-GitHub App private key (.pem)
-```
-
-### 1. Create a GitHub App
-
-1. On GitHub.com, go to Settings -> Developer settings -> GitHub Apps -> New GitHub App.
-2. Fill in a name and Homepage URL (for example, `https://example.com`).
-3. Disable Webhook if you do not need it.
-4. Set minimum permissions, for example:
-   - Contents: Read and write
-   - Metadata: Read-only
-   - Pull requests: Read and write
-5. Create the App.
-6. Note the `App ID` shown on the App general page.
-
-### 2. Generate the private key
-
-GitHub generates this key; do not create it locally with `openssl`.
-
-1. On the App general page, select `Generate a private key`.
-2. GitHub downloads a `.pem` file, for example:
-   ```text
-   ai-dev-workstation.2026-09-23.private-key.pem
-   ```
-3. The download happens only once. If you lose the file, return to the same page and generate a new private key. Generating a new key revokes the previous one.
-
-The key must contain:
-
-```text
------BEGIN RSA PRIVATE KEY-----
-...
------END RSA PRIVATE KEY-----
-```
-
-or:
-
-```text
------BEGIN PRIVATE KEY-----
-...
------END PRIVATE KEY-----
-```
-
-### 3. Install the App and get the Installation ID
-
-1. On the App page, select `Install App`.
-2. Install it on your account or selected repositories.
-3. After installation, copy the `Installation ID` from the installation URL:
-   ```text
-   https://github.com/settings/installations/<INSTALLATION_ID>
-   ```
-
-### 4. Copy the private key from your local machine to the VPS
-
-`ai github setup` runs on the VPS and expects a VPS-local `.pem` path. Copy the downloaded file from your local machine first.
-
-From your local machine:
-
-```bash
-ssh <user>@<vps-host> "mkdir -p ~/ai-workstation/secrets && chmod 700 ~/ai-workstation/secrets"
-
-scp /path/to/<app-name>.<date>.private-key.pem \
-  <user>@<vps-host>:~/ai-workstation/secrets/github-app.pem
-```
-
-Example:
-
-```bash
-scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pem" \
-  mosabbir-cloud:~/ai-workstation/secrets/github-app.pem
-```
-
-Alternatively, copy to a temporary VPS path and let setup install it:
-
-```bash
-scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pem" \
-  mosabbir-cloud:/tmp/github-app.pem
-```
-
-> [!NOTE]
-> On macOS, if `scp` fails with `Operation not permitted` for a file under `~/Downloads`, macOS privacy is blocking Terminal from reading Downloads. Fix 1 (fastest, no settings change): move it with Finder.
->
-> 1. Open Finder -> Downloads.
-> 2. Copy `ai-dev-workstation.2026-09-23.private-key.pem`.
-> 3. Paste it in your Home folder, for example to `~` or `~/.ssh/`.
-> 4. Then from Terminal:
->
-> ```bash
-> chmod 600 ~/ai-dev-workstation.2026-09-23.private-key.pem
->
-> scp ~/ai-dev-workstation.2026-09-23.private-key.pem \
->   mosabbir-cloud:~/ai-workstation/secrets/github-app.pem
-> ```
->
-> If you pasted to `~/.ssh/`, adjust the path accordingly. Do not use `cp` in Terminal to move it — the same block will hit. Use Finder drag/copy.
-
-Then, on the VPS:
-
-```bash
-chmod 600 ~/ai-workstation/secrets/github-app.pem
-ls -l ~/ai-workstation/secrets/github-app.pem
-head -1 ~/ai-workstation/secrets/github-app.pem
-```
-
-The final private key belongs at:
-
-```text
-~/ai-workstation/secrets/github-app.pem
-```
-
-Protect it:
-
-```bash
-chmod 600 ~/ai-workstation/secrets/github-app.pem
-```
-
-### 5. Configure and test
-
-On the VPS:
+Quick reference (on the VPS):
 
 ```bash
 ai github setup
@@ -552,32 +435,9 @@ ai github status
 ai github test
 ```
 
-When `ai github setup` prompts for:
+The private key belongs at `~/ai-workstation/secrets/github-app.pem` (mode `600`). A healthy test reports:
 
 ```text
-Private key (.pem) path:
-```
-
-enter either:
-
-```text
-~/ai-workstation/secrets/github-app.pem
-```
-
-or, if you used the temporary-path method:
-
-```text
-/tmp/github-app.pem
-```
-
-Setup copies the key to `~/ai-workstation/secrets/github-app.pem`, saves the App and Installation IDs to `.env`, and starts the broker service.
-
-A successful authentication test should report:
-
-```text
-Testing GitHub App credentials...
-✓ GitHub Installation Token: OK
-
 GitHub authentication: READY ✓
 ```
 
@@ -874,69 +734,19 @@ The container IP and app ports are runtime values and must not be hard-coded.
 
 ## Anywhere Access via Cloudflare Tunnel
 
-SSH tunneling is the default (zero public attack surface). Cloudflare Tunnel is the opt-in path for using the app and DSH from anywhere without running SSH from your own machine.
+SSH tunneling is the default (zero public attack surface). Cloudflare Tunnel is the opt-in path for using the app and DSH from anywhere without running SSH from your own machine. Everything is done in the Cloudflare dashboard.
 
-How it stays fast and safe:
+Full guide (dashboard setup, route form, multi-app hostnames, troubleshooting): [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md).
 
-- `cloudflared` runs on the VPS host, not inside the 512 MB workstation container, so it adds no container memory/CPU pressure.
-- The origin is always local (`http://127.0.0.1:<port>`), so there is no extra network hop and no dependency on the changing container IP.
-- A named tunnel (stable DNS) with QUIC transport reuses a small number of long-lived connections instead of opening one per request.
-- Development ports stay bound to `127.0.0.1`; Cloudflare is the only ingress. Both hostnames must sit behind a Cloudflare Access policy.
-
-### Prerequisites
-
-1. A domain with DNS on Cloudflare.
-2. One named tunnel plus two DNS routes (run once from any machine with `cloudflared`):
-
-```bash
-cloudflared tunnel login
-cloudflared tunnel create ai-workstation
-cloudflared tunnel route dns ai-workstation app.example.com
-cloudflared tunnel route dns ai-workstation dsh.example.com
-cloudflared tunnel list  # note the Tunnel ID (UUID)
-```
-
-3. In Cloudflare Zero Trust -> Access, add an application policy for `app.example.com` and `dsh.example.com` (for example, email OTP or Google login). Do not skip this: the dev server and DSH have no login of their own.
-
-### Setup (on the VPS)
+Quick reference (on the VPS):
 
 ```bash
 ai tunnel setup
 ai tunnel status
+ai preview   # prints Anywhere URLs, flags any dashboard port edit
 ```
 
-`ai tunnel setup` asks for the Tunnel ID, the credentials JSON path (copied to `secrets/cloudflared-<id>.json` with `600`), both hostnames, and the app local port (defaults to the detected app port). It writes `runtime/cloudflared/config.yml`, stores `CLOUDFLARED_*` values in `.env`, installs `cloudflared` if missing (amd64/arm64 `.deb`), and starts the `ai-cloudflared` systemd service with QUIC transport.
-
-Result:
-
-```text
-App : https://app.example.com
-DSH : https://dsh.example.com
-```
-
-### Keep the app port in sync
-
-No extra command needed. `ai preview` auto-detects the listening app port and, when it differs from the tunnel config, runs the equivalent of `ai tunnel sync <port>` (rewrites the ingress rule and restarts the service) before printing the URLs.
-
-```bash
-ai preview
-```
-
-Manual sync is only needed if you want to point the tunnel at a port without running preview:
-
-```bash
-ai tunnel sync 5173
-ai tunnel status
-```
-
-### Manage
-
-```bash
-ai tunnel status
-ai tunnel start
-ai tunnel stop
-ai tunnel logs
-```
+Result: `https://app.example.com` and `https://dsh.example.com`, each behind a Cloudflare Access policy.
 
 ### Bind address (automatic)
 
@@ -949,18 +759,6 @@ ai tunnel logs
 - Non-JS backends (Python / Go / ...) are not started by `ai run`: bind `0.0.0.0` manually (Flask `--host=0.0.0.0`, uvicorn `--host 0.0.0.0`, Django `runserver 0.0.0.0:8000` plus `ALLOWED_HOSTS`).
 
 `ai run` prints the active mode: `Bind: auto (--host 0.0.0.0)` or `Bind: project config`.
-
-### Framework hostname checks
-
-Tunnels change the `Host` header, so allow the public hostname in the dev server:
-
-- Vite: `server.allowedHosts: ['app.example.com']` (or `true` for trusted previews).
-- Next.js: `experimental.allowedDevOrigins: ['https://app.example.com']`.
-- Other servers: equivalent allowed-hosts / trusted-hosts setting.
-
-### When not to use it
-
-Prefer plain SSH tunneling for daily work on trusted machines. Use the Cloudflare path only when you genuinely need access without your own SSH client (another device, another network).
 
 ---
 
@@ -1193,6 +991,53 @@ ai run
 ai preview
 ```
 
+With a tunnel configured, `ai preview` also prints the Anywhere URLs and flags any dashboard port edit. No extra command.
+
+### First-time anywhere access (one time)
+
+Dashboard:
+
+```text
+Zero Trust -> Networks -> Tunnels -> Create tunnel (Cloudflared)
+  -> copy the connector token
+Tunnel -> Public hostnames -> Add (after connector is running):
+  app.example.com -> http://127.0.0.1:<app-port>
+  dsh.example.com -> http://127.0.0.1:4090
+Zero Trust -> Access -> policy for both hostnames
+```
+
+VPS (connector install = Debian 64-bit on amd64 VPS, arm64-bit on ARM VPS):
+
+```bash
+ai tunnel setup
+ai tunnel status
+```
+
+Verify:
+
+```bash
+ai run
+ai preview
+```
+
+Open `https://app.example.com` and `https://dsh.example.com` from anywhere.
+
+### New project with anywhere access (one time per project)
+
+Dashboard: add one public hostname for the project:
+
+```text
+<project>.example.com -> http://127.0.0.1:<that project's port>
+```
+
+VPS: nothing tunnel-related to run. Daily switching stays:
+
+```bash
+ai use <project>
+ai run
+ai preview
+```
+
 ### End of day
 
 ```bash
@@ -1271,27 +1116,17 @@ Check the broker and GitHub App configuration.
 
 Do not copy a PAT or host SSH private key into the workstation as a workaround.
 
-If `ai github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing:
-
-```bash
-~/ai-workstation/.venv/bin/pip install "PyJWT[crypto]"
-~/ai-workstation/.venv/bin/python -c 'from jwt.api_jws import PyJWS; PyJWS().get_algorithm_by_name("RS256"); print("RS256 OK")'
-sudo systemctl restart ai-github-broker
-ai github test
-```
-
-New installs get this automatically via `./install.sh`.
+If `ai github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing. Fix: [docs/github-app-setup.md](docs/github-app-setup.md#troubleshooting).
 
 ### Tunnel fails or serves the wrong port
 
 ```bash
 ai tunnel status
-sudo journalctl -u ai-cloudflared -n 50
+sudo journalctl -u cloudflared -n 50
 ai preview
-ai tunnel sync [port]
 ```
 
-Common causes: DNS route missing (`cloudflared tunnel route dns`), dev server blocking the public hostname (allow it in Vite/Next.js), or a missing Cloudflare Access policy. A stale app port fixes itself on the next `ai preview` (auto-sync).
+Common causes: public hostname missing in the dashboard tunnel, wrong app port after switching projects (`ai preview` prints the exact dashboard edit), connector token revoked (re-run `ai tunnel setup`), dev server blocking the public hostname (allow it in Vite/Next.js), or a missing Cloudflare Access policy.
 
 ### Preview fails
 
@@ -1331,7 +1166,7 @@ For deterministic deployments, use a SHA-tagged image.
 [ ] Only active project is mounted at /workspace
 [ ] .env is not tracked
 [ ] GitHub private key is not tracked
-[ ] Cloudflare Tunnel credentials are not tracked
+[ ] Cloudflare Tunnel token is not tracked
 [ ] Cloudflare Access policy protects tunnel hostnames
 [ ] DSH credentials are protected
 [ ] GitHub authentication uses broker/App flow

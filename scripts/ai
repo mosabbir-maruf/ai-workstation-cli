@@ -38,7 +38,7 @@ load_env() {
 save_env() {
     local image dsh_version workstation_root
     local github_app_id github_installation_id github_broker_gid github_broker_socket
-    local tunnel_id tunnel_app_host tunnel_dsh_host tunnel_app_port
+    local tunnel_set tunnel_app_host tunnel_dsh_host tunnel_app_port
 
     image="$(grep '^IMAGE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     dsh_version="$(grep '^DSH_VERSION=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -49,7 +49,7 @@ save_env() {
     github_broker_gid="$(grep '^GITHUB_BROKER_GID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     github_broker_socket="$(grep '^GITHUB_BROKER_SOCKET=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
-    tunnel_id="$(grep '^CLOUDFLARED_TUNNEL_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    tunnel_set="$(grep '^CLOUDFLARED_TOKEN_SET=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     tunnel_app_host="$(grep '^CLOUDFLARED_APP_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     tunnel_dsh_host="$(grep '^CLOUDFLARED_DSH_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     tunnel_app_port="$(grep '^CLOUDFLARED_APP_PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -68,7 +68,7 @@ GITHUB_APP_ID=$github_app_id
 GITHUB_INSTALLATION_ID=$github_installation_id
 GITHUB_BROKER_SOCKET=$github_broker_socket
 GITHUB_BROKER_GID=$github_broker_gid
-CLOUDFLARED_TUNNEL_ID=$tunnel_id
+CLOUDFLARED_TOKEN_SET=$tunnel_set
 CLOUDFLARED_APP_HOSTNAME=$tunnel_app_host
 CLOUDFLARED_DSH_HOSTNAME=$tunnel_dsh_host
 CLOUDFLARED_APP_PORT=$tunnel_app_port
@@ -651,12 +651,12 @@ cmd_preview() {
     preview_tunnel_section() {
         local current_port="${1:-}"
 
-        [[ -f "${TUNNEL_LIB:-}" && -n "${CLOUDFLARED_TUNNEL_ID:-}" && -n "${CLOUDFLARED_APP_HOSTNAME:-}" && -n "${CLOUDFLARED_DSH_HOSTNAME:-}" ]] ||
+        [[ -f "${TUNNEL_LIB:-}" && -n "${CLOUDFLARED_TOKEN_SET:-}" && -n "${CLOUDFLARED_APP_HOSTNAME:-}" && -n "${CLOUDFLARED_DSH_HOSTNAME:-}" ]] ||
             return 0
 
         if [[ -n "$current_port" && "$current_port" != "${CLOUDFLARED_APP_PORT:-}" ]]; then
             echo
-            echo "Tunnel out of sync (${CLOUDFLARED_APP_PORT:-none} -> $current_port), syncing..."
+            echo "Tunnel port changed (${CLOUDFLARED_APP_PORT:-none} -> $current_port)."
 
             if bash "$TUNNEL_LIB" sync "$current_port"; then
                 load_env

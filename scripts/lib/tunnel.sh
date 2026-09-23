@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
+# Anywhere access via a dashboard-managed Cloudflare Tunnel.
+#
+# The tunnel itself is created in Cloudflare Zero Trust -> Networks ->
+# Tunnels (Cloudflared type). This script only installs the connector on
+# the VPS with the dashboard token and remembers the hostnames so
+# `ai preview` can print the public URLs and flag a stale app port.
 set -euo pipefail
 
 ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation}"
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
-RUNTIME_DIR="$ROOT/runtime"
-TUNNEL_DIR="$RUNTIME_DIR/cloudflared"
-CONFIG_FILE="$TUNNEL_DIR/config.yml"
-SERVICE_NAME="ai-cloudflared"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+TOKEN_FILE="$SECRETS_DIR/cloudflared-token"
+SERVICE_NAME="cloudflared"
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORTS_SCRIPT="$LIB_DIR/ports.sh"
 
@@ -72,8 +75,7 @@ ensure_cloudflared() {
 }
 
 detect_app_port() {
-    # First port from the shared detector (already sorted). No extra
-    # container exec when the caller passes an explicit port to sync.
+    # First port from the shared detector (already sorted).
     [[ -f "$PORTS_SCRIPT" ]] || return 1
 
     local all_ports
@@ -83,50 +85,16 @@ detect_app_port() {
     printf '%s\n' "${all_ports%% *}"
 }
 
-write_config() {
-    local tunnel_id="$1"
-    local creds_file="$2"
-    local app_host="$3"
-    local dsh_host="$4"
-    local app_port="$5"
-
-    mkdir -p "$TUNNEL_DIR"
-    chmod 700 "$TUNNEL_DIR"
-
-    cat > "$CONFIG_FILE" <<EOF
-# Managed by: ai tunnel setup / ai tunnel sync
-# Do not edit manually.
-tunnel: $tunnel_id
-credentials-file: $creds_file
-protocol: quic
-edge-ip-version: auto
-retries: 5
-originRequest:
-  connectTimeout: 10s
-ingress:
-  - hostname: $app_host
-    service: http://127.0.0.1:$app_port
-  - hostname: $dsh_host
-    service: http://127.0.0.1:4090
-  - service: http_status:404
-EOF
-
-    chmod 600 "$CONFIG_FILE"
-}
-
 tunnel_setup() {
     echo
     echo "========================================"
     echo "     Cloudflare Tunnel Setup"
     echo "========================================"
     echo
-    echo "Prerequisites (one time, on your admin machine):"
-    echo "  1. Domain added to Cloudflare (DNS)."
-    echo "  2. cloudflared tunnel login"
-    echo "  3. cloudflared tunnel create <name>"
-    echo "  4. cloudflared tunnel route dns <name> <app-host>"
-    echo "  5. cloudflared tunnel route dns <name> <dsh-host>"
-    echo "  6. Cloudflare Access policy on both hostnames."
+    echo "First, in Cloudflare Zero Trust -> Networks -> Tunnels:"
+    echo "  1. Create tunnel (type Cloudflared), name it, copy its token."
+    echo "  2. Add public hostnames AFTER setup (see below)."
+    echo "  3. Add an Access policy for both hostnames."
     echo
 
     ensure_cloudflared
@@ -134,27 +102,16 @@ tunnel_setup() {
     mkdir -p "$SECRETS_DIR"
     chmod 700 "$SECRETS_DIR"
 
-    local tunnel_id creds_src app_host dsh_host app_port detected
+    local token app_host dsh_host app_port detected
 
-    read -r -p "Tunnel ID: " tunnel_id
-    [[ "$tunnel_id" =~ ^[a-f0-9-]{10,}$ ]] ||
-        die "Invalid Tunnel ID (expected UUID from 'cloudflared tunnel list')."
-
+    read -r -s -p "Connector token (from dashboard, input hidden): " token
     echo
-    read -r -p "Tunnel credentials JSON path: " creds_src
-    # tolerate surrounding quotes from copy-paste
-    creds_src="${creds_src%\"}"
-    creds_src="${creds_src#\"}"
-    creds_src="${creds_src%\'}"
-    creds_src="${creds_src#\'}"
-    [[ -f "$creds_src" ]] ||
-        die "Credentials file not found: $creds_src"
+    [[ -n "$token" ]] ||
+        die "Empty token. Copy it from the tunnel's connector install command."
 
-    local creds_dest="$SECRETS_DIR/cloudflared-$tunnel_id.json"
-    if [[ "$(realpath "$creds_src")" != "$(realpath "$creds_dest" 2>/dev/null || echo "$creds_dest")" ]]; then
-        cp "$creds_src" "$creds_dest"
-    fi
-    chmod 600 "$creds_dest"
+    printf '%s' "$token" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    token=""
 
     echo
     read -r -p "App hostname (e.g. app.example.com): " app_host
@@ -169,10 +126,8 @@ tunnel_setup() {
         die "App and DSH hostnames must differ."
 
     detected="$(detect_app_port || true)"
-    if [[ -n "$detected" ]]; then
-        echo
+    [[ -n "$detected" ]] &&
         echo "Detected app port: $detected"
-    fi
 
     echo
     read -r -p "App local port [${detected:-3000}]: " app_port
@@ -180,60 +135,35 @@ tunnel_setup() {
     valid_port "$app_port" ||
         die "Invalid port: $app_port"
 
-    write_config "$tunnel_id" "$creds_dest" "$app_host" "$dsh_host" "$app_port"
-
-    set_env CLOUDFLARED_TUNNEL_ID "$tunnel_id"
-    set_env CLOUDFLARED_APP_HOSTNAME "$app_host"
-    set_env CLOUDFLARED_DSH_HOSTNAME "$dsh_host"
-    set_env CLOUDFLARED_APP_PORT "$app_port"
-
     echo
-    echo "✓ Tunnel config written: $CONFIG_FILE"
+    echo "Installing connector service..."
 
-    echo
-    echo "Creating systemd service..."
-
-    local cloudflared_bin
-    cloudflared_bin="$(command -v cloudflared)" ||
-        die "cloudflared not found after install."
-
-    sudo tee "$SERVICE_FILE" >/dev/null <<SERVICE
-[Unit]
-Description=AI Workstation Cloudflare Tunnel
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=$(id -un)
-ExecStart=$cloudflared_bin tunnel --config $CONFIG_FILE run
-Restart=always
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE_NAME" >/dev/null
-    sudo systemctl restart "$SERVICE_NAME"
+    if sudo systemctl list-unit-files --quiet "$SERVICE_NAME.service" 2>/dev/null ||
+        [[ -f "/etc/systemd/system/$SERVICE_NAME.service" ]]; then
+        sudo systemctl restart "$SERVICE_NAME"
+    else
+        sudo cloudflared service install "$(cat "$TOKEN_FILE")"
+    fi
 
     sleep 2
 
     sudo systemctl is-active --quiet "$SERVICE_NAME" ||
-        die "cloudflared failed to start. Run: sudo journalctl -u $SERVICE_NAME -n 50"
+        die "cloudflared connector failed to start. Run: sudo journalctl -u $SERVICE_NAME -n 50"
 
-    echo "✓ Tunnel running"
+    set_env CLOUDFLARED_TOKEN_SET "1"
+    set_env CLOUDFLARED_APP_HOSTNAME "$app_host"
+    set_env CLOUDFLARED_DSH_HOSTNAME "$dsh_host"
+    set_env CLOUDFLARED_APP_PORT "$app_port"
+
+    echo "✓ Connector running"
+    echo
+    echo "Now add both public hostnames in the dashboard tunnel (origin = VPS):"
+    echo "  $app_host -> http://127.0.0.1:$app_port"
+    echo "  $dsh_host -> http://127.0.0.1:4090"
     echo
     echo "URLs (after DNS + Access policy propagate):"
     echo "  App : https://$app_host"
     echo "  DSH : https://$dsh_host"
-    echo
-    echo "If your dev server rejects the hostname (e.g. Vite 403),"
-    echo "allow it: Vite server.allowedHosts, Next.js experimental"
-    echo "allowedDevOrigins, or equivalent."
     echo
 }
 
@@ -241,12 +171,10 @@ tunnel_sync() {
     load_env_quiet
 
     local app_port="${1:-}"
-    local tunnel_id="${CLOUDFLARED_TUNNEL_ID:-}"
     local app_host="${CLOUDFLARED_APP_HOSTNAME:-}"
     local dsh_host="${CLOUDFLARED_DSH_HOSTNAME:-}"
-    local creds_dest="$SECRETS_DIR/cloudflared-$tunnel_id.json"
 
-    [[ -n "$tunnel_id" && -n "$app_host" && -n "$dsh_host" ]] ||
+    [[ -n "$app_host" && -n "$dsh_host" ]] ||
         die "Tunnel is not configured. Run: ai tunnel setup"
 
     if [[ -z "$app_port" ]]; then
@@ -259,30 +187,21 @@ tunnel_sync() {
     valid_port "$app_port" ||
         die "Invalid port: $app_port"
 
-    [[ -f "$creds_dest" ]] ||
-        die "Credentials file missing: $creds_dest"
-
-    # No-op when already in sync: avoids a needless service restart.
-    if [[ "${CLOUDFLARED_APP_PORT:-}" == "$app_port" && -f "$CONFIG_FILE" ]]; then
-        echo "✓ Tunnel already in sync (port $app_port)"
+    # Ingress lives in the dashboard: only the remembered port can be
+    # updated here. Changing it takes one click in the tunnel's public
+    # hostnames; nothing restarts, so this is instant.
+    if [[ "${CLOUDFLARED_APP_PORT:-}" == "$app_port" ]]; then
+        echo "✓ Tunnel in sync (port $app_port)"
         echo "  App : https://$app_host -> 127.0.0.1:$app_port"
         return 0
     fi
 
-    write_config "$tunnel_id" "$creds_dest" "$app_host" "$dsh_host" "$app_port"
     set_env CLOUDFLARED_APP_PORT "$app_port"
 
-    if sudo systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-        sudo systemctl restart "$SERVICE_NAME"
-        sleep 2
-        sudo systemctl is-active --quiet "$SERVICE_NAME" ||
-            die "cloudflared failed to restart."
-        echo "✓ Tunnel synced to port $app_port and restarted"
-    else
-        echo "✓ Tunnel config synced to port $app_port (service not running)"
-    fi
-
-    echo "  App : https://$app_host -> 127.0.0.1:$app_port"
+    echo "App port changed: ${CLOUDFLARED_APP_PORT:-none} -> $app_port"
+    echo "Update it in Zero Trust -> Tunnels -> <tunnel> -> Public hostnames:"
+    echo "  $app_host -> http://127.0.0.1:$app_port"
+    echo "  App : https://$app_host"
 }
 
 tunnel_status() {
@@ -290,19 +209,17 @@ tunnel_status() {
 
     echo "=== Cloudflare Tunnel ==="
     echo
-    echo "Tunnel ID:     ${CLOUDFLARED_TUNNEL_ID:-not configured}"
+    [[ -f "$TOKEN_FILE" ]] &&
+        echo "Connector token: configured" ||
+        echo "Connector token: not configured"
     echo "App hostname:  ${CLOUDFLARED_APP_HOSTNAME:-not configured}"
     echo "DSH hostname:  ${CLOUDFLARED_DSH_HOSTNAME:-not configured}"
     echo "App port:      ${CLOUDFLARED_APP_PORT:-not configured}"
     echo
 
-    [[ -f "$CONFIG_FILE" ]] &&
-        echo "Config:        configured" ||
-        echo "Config:        not configured"
-
     systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null &&
-        echo "Service:       running" ||
-        echo "Service:       stopped"
+        echo "Connector:     running" ||
+        echo "Connector:     stopped"
     echo
 }
 

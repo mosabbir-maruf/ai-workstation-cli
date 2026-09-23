@@ -64,7 +64,6 @@ mkdir -p \
     "$ROOT/runtime/app" \
     "$ROOT/runtime/npm-global" \
     "$ROOT/runtime/github-broker" \
-    "$ROOT/runtime/cloudflared" \
     "$ROOT/secrets" \
     "$HOME/projects"
 
@@ -74,7 +73,6 @@ chmod 700 \
     "$ROOT/runtime/app" \
     "$ROOT/runtime/npm-global" \
     "$ROOT/runtime/github-broker" \
-    "$ROOT/runtime/cloudflared" \
     "$ROOT/secrets"
 
 # --------------------------------------------------
@@ -186,9 +184,6 @@ echo "Running validation..."
 
 [[ -d "$ROOT/runtime/github-broker" ]] ||
     die "runtime/github-broker missing."
-
-[[ -d "$ROOT/runtime/cloudflared" ]] ||
-    die "runtime/cloudflared missing."
 
 [[ -d "$ROOT/secrets" ]] ||
     die "secrets directory missing."
