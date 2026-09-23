@@ -154,6 +154,12 @@ tunnel_setup() {
     set_env CLOUDFLARED_APP_HOSTNAME "$app_host"
     set_env CLOUDFLARED_DSH_HOSTNAME "$dsh_host"
     set_env CLOUDFLARED_APP_PORT "$app_port"
+    set_env DSH_TRUSTED_HOSTS "$dsh_host"
+    if [[ -z "$(grep '^ALLOWED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)" ]]; then
+        set_env ALLOWED_HOSTS "$app_host"
+    else
+        echo "NOTE: ALLOWED_HOSTS already set; append '$app_host' to it (comma-separated) if this hostname is new."
+    fi
 
     echo "✓ Connector running"
     echo

@@ -99,11 +99,19 @@ ai tunnel logs
 
 ## Framework hostname checks
 
-Tunnels change the `Host` header, so allow the public hostname in the dev server:
+Tunnels change the `Host` header. `ai tunnel setup` stores the app hostname in `ALLOWED_HOSTS`, which the workstation passes into the container — no hardcoded domains in project files:
 
-- Vite: `server.allowedHosts: ['app.example.com']` (or `true` for trusted previews).
-- Next.js: `experimental.allowedDevOrigins: ['https://app.example.com']`.
-- Other servers: equivalent allowed-hosts / trusted-hosts setting.
+- Vite: read it in `vite.config.js`:
+  ```js
+  allowedHosts: [
+    'localhost',
+    '127.0.0.1',
+    ...(process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
+  ],
+  ```
+- Next.js: `experimental.allowedDevOrigins` from the same variable (or list hostnames explicitly).
+- Other servers: equivalent allowed-hosts / trusted-hosts setting fed by `$ALLOWED_HOSTS`.
+- Multiple projects: comma-separated list, e.g. `ALLOWED_HOSTS=app.example.com,paradinha.example.com`.
 
 ## Troubleshooting
 
@@ -114,6 +122,11 @@ ai preview
 ```
 
 - Cloudflare error 1033/502: connector down or wrong origin port (compare `ai preview` port with the dashboard route).
+- DSH page loads but `/api/*` returns bare `forbidden`: the DSH browser-trust fence doesn't know the public hostname. `ai tunnel setup` stores it in `DSH_TRUSTED_HOSTS` automatically; if the hostname was added later, set it and recreate the workstation (a plain `ai restart` does not pick up env changes):
+  ```bash
+  grep '^DSH_TRUSTED_HOSTS=' ~/ai-workstation/.env || echo "DSH_TRUSTED_HOSTS=<dsh-host>" >> ~/ai-workstation/.env
+  ai stop && ai start
+  ```
 - App 403 Invalid Host: allowlist the hostname (above).
 - Stuck at Cloudflare login loop: Access policy misconfigured.
 - Connector token revoked: re-run `ai tunnel setup` with the fresh token.

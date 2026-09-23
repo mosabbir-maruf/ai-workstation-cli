@@ -32,11 +32,16 @@ load_env() {
     [[ -n "$env_dsh_version" ]] && DSH_VERSION="$env_dsh_version"
     [[ -n "$env_root" ]] && AI_WORKSTATION_ROOT="$env_root"
 
-    export IMAGE DSH_VERSION AI_WORKSTATION_ROOT
+    # Dev-server hostname allowlist: explicit value wins, otherwise fall
+    # back to the tunnel app hostname so `ai tunnel setup` wires it up
+    # with no extra step. Empty = local-only.
+    ALLOWED_HOSTS="${ALLOWED_HOSTS:-${CLOUDFLARED_APP_HOSTNAME:-}}"
+
+    export IMAGE DSH_VERSION AI_WORKSTATION_ROOT ALLOWED_HOSTS
 }
 
 save_env() {
-    local image dsh_version workstation_root
+    local image dsh_version workstation_root dsh_trusted_hosts allowed_hosts
     local github_app_id github_installation_id github_broker_gid github_broker_socket
     local tunnel_set tunnel_app_host tunnel_dsh_host tunnel_app_port
 
@@ -57,10 +62,14 @@ save_env() {
     image="${image:-${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation:latest}}"
     dsh_version="${dsh_version:-${DSH_VERSION:-0.1.2-rc.1}}"
     workstation_root="${workstation_root:-${AI_WORKSTATION_ROOT:-$ROOT}}"
+    dsh_trusted_hosts="$(grep '^DSH_TRUSTED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    allowed_hosts="$(grep '^ALLOWED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
     cat > "$ENV_FILE" <<EOF2
 IMAGE=$image
 DSH_VERSION=$dsh_version
+DSH_TRUSTED_HOSTS=$dsh_trusted_hosts
+ALLOWED_HOSTS=$allowed_hosts
 ACTIVE_PROJECT=${ACTIVE_PROJECT:-}
 ACTIVE_PROJECT_PATH=${ACTIVE_PROJECT_PATH:-}
 AI_WORKSTATION_ROOT=$workstation_root

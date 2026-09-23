@@ -54,11 +54,18 @@ start_dsh() {
 
     echo "Starting DSH..."
 
+    # Extra authorities the DSH /api browser-trust fence accepts
+    # (e.g. the public Cloudflare hostname). Space/comma-separated
+    # via DSH_TRUSTED_HOSTS; unset means local-only trust.
+    local dsh_args=(web --host "$DSH_HOST" --port "$DSH_PORT" --no-open)
+    local trusted="${DSH_TRUSTED_HOSTS:-}"
+    local entry
+    for entry in ${trusted//,/ }; do
+        [[ -n "$entry" ]] && dsh_args+=(--trusted-host "$entry")
+    done
+
     node --expose-internals "$DSH_BIN" \
-        web \
-        --host "$DSH_HOST" \
-        --port "$DSH_PORT" \
-        --no-open >>"$LOG_FILE" 2>&1 &
+        "${dsh_args[@]}" >>"$LOG_FILE" 2>&1 &
 
     echo "$!" > "$DSH_PID_FILE"
 }
