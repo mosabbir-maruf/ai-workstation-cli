@@ -669,6 +669,25 @@ cmd_preview() {
         echo "Anywhere URLs:"
         echo "  App : https://${CLOUDFLARED_APP_HOSTNAME}"
         echo "  DSH : https://${CLOUDFLARED_DSH_HOSTNAME}"
+        preview_dsh_token_url
+    }
+
+    preview_dsh_token_url() {
+        # DSH prints a one-time login URL (with token) at startup and
+        # rejects bare requests. Reuse its token on the public hostname
+        # so the printed URL opens directly with no VPS round-trip.
+        local log="$RUNTIME_DIR/harness/harness.log"
+        [[ -f "$log" ]] || return 0
+
+        local dsh_origin="http://127.0.0.1:4090"
+        local printed
+        printed="$(grep -Eom1 "http://127\\.0\\.0\\.1:4090[^[:space:]]*" "$log" 2>/dev/null | tr -d "\"'" || true)"
+        [[ -n "$printed" ]] || return 0
+
+        local suffix="${printed#$dsh_origin}"
+        [[ -n "$suffix" && "$suffix" != "/" ]] || return 0
+
+        echo "  DSH open: https://${CLOUDFLARED_DSH_HOSTNAME}${suffix}"
     }
 
     echo "=== Preview ==="

@@ -77,6 +77,17 @@ ai preview
 ai tunnel status
 ```
 
+`ai preview` also prints a ready-to-open DSH line when DSH has issued a login token:
+
+```text
+Anywhere URLs:
+  App : https://app.example.com
+  DSH : https://dsh.example.com
+  DSH open: https://dsh.example.com/?token=...
+```
+
+Bookmark the `DSH open:` URL — it works from anywhere with no VPS access until the next harness restart (which rotates the token).
+
 ## Manage
 
 ```bash
