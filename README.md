@@ -2,7 +2,7 @@
 
 > A reusable, isolated AI coding workstation for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS.
 
-[![Platform](https://img.shields.io/badge/platform-linux%2Farm64-informational)](https://github.com/mosabbir-maruf/ai-workstation)
+[![Platform](https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational)](https://github.com/mosabbir-maruf/ai-workstation)
 [![Runtime](https://img.shields.io/badge/runtime-Docker-blue)](https://www.docker.com/)
 [![AI Runtime](https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black)](https://github.com/deepseek-ai/deepseek-harness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -328,7 +328,7 @@ Only the selected project is mounted into `/workspace`.
 - Python 3.
 - `sudo`.
 - GitHub access to the repositories you will manage.
-- ARM64 host for the current published image, or an appropriate image/build strategy.
+- Linux host (amd64 or arm64) for the published multi-arch image, or a local Docker build otherwise.
 
 The included installer validates Docker, Git, Python 3, Docker daemon access, and Python virtual-environment support.
 
@@ -1004,7 +1004,7 @@ DSH updates do not require rebuilding the base image because the installation li
 
 ## CI/CD
 
-The workstation image is built for Linux ARM64 in GitHub Actions.
+The workstation image is built for Linux amd64 and arm64 in GitHub Actions.
 
 ```text
 Push to main
@@ -1013,10 +1013,10 @@ Push to main
 .github/workflows/image.yml
      │
      ├── checkout
-     ├── QEMU ARM64
+     ├── QEMU (multi-arch)
      ├── Docker Buildx
      ├── GHCR login
-     ├── build linux/arm64
+     ├── build linux/amd64,linux/arm64
      ├── push :latest
      ├── push :<commit-sha>
      ├── inspect published images
@@ -1247,9 +1247,9 @@ GitHub access is brokered instead of mounting `~/.ssh` into the workstation.
 
 Development servers should not accidentally become public services. SSH tunneling provides private operator access.
 
-### Prebuilt ARM64 image
+### Prebuilt multi-arch image
 
-The production VPS consumes a prebuilt ARM64 image instead of compiling the image locally.
+The production VPS consumes a prebuilt amd64/arm64 image instead of compiling the image locally.
 
 ---
 
