@@ -1322,7 +1322,7 @@ Security is foundational to AI Workstation. To report a security vulnerability o
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for the full license text.
+This project is licensed under the MIT License. See [LICENSE](https://github.com/mosabbir-maruf/ai-workstation-cli/blob/main/LICENSE) for the full license text.
 
 ---
 
