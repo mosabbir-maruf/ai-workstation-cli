@@ -7,7 +7,7 @@
 <p align="center">
   A reusable, isolated AI coding workstation for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS.
   <br />
-  <em>Looking for the CLI tool? Check out the <a href="https://github.com/mosabbir-maruf/ai-workstation-cli">AI Workstation CLI</a>.</em>
+  <em>Looking for the web console? Check out the <a href="https://github.com/mosabbir-maruf/ai-workstation">AI Workstation Web Interface</a>.</em>
 </p>
 
 <p align="center">
