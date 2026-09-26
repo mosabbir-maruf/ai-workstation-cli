@@ -1,14 +1,26 @@
-# AI Workstation
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="AI Workstation Logo" width="120" height="120" />
+</p>
 
-> A reusable, isolated AI coding workstation for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS.
+<h1 align="center">AI Workstation</h1>
 
-[![Platform](https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational)](https://github.com/mosabbir-maruf/ai-workstation-cli)
-[![Runtime](https://img.shields.io/badge/runtime-Docker-blue)](https://www.docker.com/)
-[![AI Runtime](https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black)](https://github.com/deepseek-ai/deepseek-harness)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Contributing](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Security Policy](https://img.shields.io/badge/security-policy-red.svg)](SECURITY.md)
-[![Maintainer](https://img.shields.io/badge/maintainer-Mosabbir%20Maruf-181717?logo=github)](https://github.com/mosabbir-maruf)
+<p align="center">
+  A reusable, isolated AI coding workstation for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS.
+  <br />
+  <em>Looking for the CLI tool? Check out the <a href="https://github.com/mosabbir-maruf/ai-workstation-cli">AI Workstation CLI</a>.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/runtime-Docker-blue" alt="Runtime" /></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black" alt="AI Runtime" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg" alt="Contributing" /></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-red.svg" alt="Security Policy" /></a>
+  <a href="https://github.com/mosabbir-maruf"><img src="https://img.shields.io/badge/maintainer-Mosabbir%20Maruf-181717?logo=github" alt="Maintainer" /></a>
+</p>
+
+---
 
 ## Table of Contents
 
@@ -503,6 +515,8 @@ ai stop
 ---
 
 ## CLI Reference
+
+The command-line interface is maintained in [mosabbir-maruf/ai-workstation-cli](https://github.com/mosabbir-maruf/ai-workstation-cli).
 
 Run:
 
