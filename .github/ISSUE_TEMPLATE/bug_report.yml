@@ -20,7 +20,7 @@ body:
         > - Contents of `.env` files
         > - Sensitive host network information or internal IPs
         >
-        > For security vulnerabilities, please refer to our [Security Policy](https://github.com/mosabbir-maruf/ai-workstation/blob/main/SECURITY.md).
+        > For security vulnerabilities, please refer to our [Security Policy](https://github.com/mosabbir-maruf/ai-workstation-cli/blob/main/SECURITY.md).
 
   - type: textarea
     id: summary

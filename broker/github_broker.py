@@ -13,7 +13,7 @@ import jwt
 ROOT = Path(
     os.environ.get(
         "AI_WORKSTATION_ROOT",
-        "/home/mosabbir/ai-workstation",
+        "/home/mosabbir/ai-workstation-cli",
     )
 )
 

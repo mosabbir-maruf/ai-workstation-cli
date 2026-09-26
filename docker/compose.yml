@@ -1,7 +1,7 @@
 services:
   workstation:
-    image: ${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation:latest}
-    container_name: ai-workstation
+    image: ${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}
+    container_name: ai-workstation-cli
     restart: unless-stopped
 
     group_add:
@@ -20,11 +20,11 @@ services:
 
     volumes:
       - ${ACTIVE_PROJECT_PATH:-/tmp}:/workspace
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation}/runtime/npm-global:/home/sandbox/.npm-global
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation}/runtime/dsh:/home/sandbox/.dsh
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation}/runtime/app:/run/ai-workstation/app
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation}/runtime/github-broker:/run/ai-github-broker
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation}/runtime/harness:/run/ai-workstation/harness
+      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/npm-global:/home/sandbox/.npm-global
+      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/dsh:/home/sandbox/.dsh
+      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/app:/run/ai-workstation-cli/app
+      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/github-broker:/run/ai-github-broker
+      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/harness:/run/ai-workstation-cli/harness
 
     ports:
       - "127.0.0.1:3000:3000"

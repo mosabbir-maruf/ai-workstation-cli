@@ -185,7 +185,7 @@ Secrets must **never** be checked into version control.
 ## 13. Docker Security Expectations
 
 - **Host Daemon Protection**: Access to the host Docker daemon should be restricted to administrative users.
-- **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/ai-workstation:<commit-sha>`) in production environments rather than mutable `latest` tags.
+- **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>`) in production environments rather than mutable `latest` tags.
 - **Local Port Bindings**: Ports configured in `compose.yml` (`3000`, `3001`, `8000`, `4090:4091`) must always bind to `127.0.0.1` on the host, never `0.0.0.0`.
 
 ---

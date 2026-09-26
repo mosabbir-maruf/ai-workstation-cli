@@ -65,17 +65,17 @@ or:
 From your local machine:
 
 ```bash
-ssh <user>@<vps-host> "mkdir -p ~/ai-workstation/secrets && chmod 700 ~/ai-workstation/secrets"
+ssh <user>@<vps-host> "mkdir -p ~/ai-workstation-cli/secrets && chmod 700 ~/ai-workstation-cli/secrets"
 
 scp /path/to/<app-name>.<date>.private-key.pem \
-  <user>@<vps-host>:~/ai-workstation/secrets/github-app.pem
+  <user>@<vps-host>:~/ai-workstation-cli/secrets/github-app.pem
 ```
 
 Example:
 
 ```bash
 scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pem" \
-  mosabbir-cloud:~/ai-workstation/secrets/github-app.pem
+  mosabbir-cloud:~/ai-workstation-cli/secrets/github-app.pem
 ```
 
 Alternatively, copy to a temporary VPS path and let setup install it:
@@ -97,7 +97,7 @@ scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pe
 > chmod 600 ~/ai-dev-workstation.2026-09-23.private-key.pem
 >
 > scp ~/ai-dev-workstation.2026-09-23.private-key.pem \
->   mosabbir-cloud:~/ai-workstation/secrets/github-app.pem
+>   mosabbir-cloud:~/ai-workstation-cli/secrets/github-app.pem
 > ```
 >
 > If you pasted to `~/.ssh/`, adjust the path accordingly. Do not use `cp` in Terminal to move it — the same block will hit. Use Finder drag/copy.
@@ -105,15 +105,15 @@ scp "/Users/mosabbirmaruf/Downloads/ai-dev-workstation.2026-09-23.private-key.pe
 Then, on the VPS:
 
 ```bash
-chmod 600 ~/ai-workstation/secrets/github-app.pem
-ls -l ~/ai-workstation/secrets/github-app.pem
-head -1 ~/ai-workstation/secrets/github-app.pem
+chmod 600 ~/ai-workstation-cli/secrets/github-app.pem
+ls -l ~/ai-workstation-cli/secrets/github-app.pem
+head -1 ~/ai-workstation-cli/secrets/github-app.pem
 ```
 
 The final private key belongs at:
 
 ```text
-~/ai-workstation/secrets/github-app.pem
+~/ai-workstation-cli/secrets/github-app.pem
 ```
 
 ## 5. Configure and test
@@ -135,7 +135,7 @@ Private key (.pem) path:
 enter either:
 
 ```text
-~/ai-workstation/secrets/github-app.pem
+~/ai-workstation-cli/secrets/github-app.pem
 ```
 
 or, if you used the temporary-path method:
@@ -144,9 +144,9 @@ or, if you used the temporary-path method:
 /tmp/github-app.pem
 ```
 
-(`~/...` works; setups before the tilde-expansion fix need the full path, e.g. `/home/mosabbir/ai-workstation/secrets/github-app.pem`.)
+(`~/...` works; setups before the tilde-expansion fix need the full path, e.g. `/home/mosabbir/ai-workstation-cli/secrets/github-app.pem`.)
 
-Setup copies the key to `~/ai-workstation/secrets/github-app.pem`, saves the App and Installation IDs to `.env`, and starts the broker service.
+Setup copies the key to `~/ai-workstation-cli/secrets/github-app.pem`, saves the App and Installation IDs to `.env`, and starts the broker service.
 
 A successful authentication test should report:
 
@@ -162,8 +162,8 @@ GitHub authentication: READY ✓
 If `ai github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing:
 
 ```bash
-~/ai-workstation/.venv/bin/pip install "PyJWT[crypto]"
-~/ai-workstation/.venv/bin/python -c 'from jwt.api_jws import PyJWS; PyJWS().get_algorithm_by_name("RS256"); print("RS256 OK")'
+~/ai-workstation-cli/.venv/bin/pip install "PyJWT[crypto]"
+~/ai-workstation-cli/.venv/bin/python -c 'from jwt.api_jws import PyJWS; PyJWS().get_algorithm_by_name("RS256"); print("RS256 OK")'
 sudo systemctl restart ai-github-broker
 ai github test
 ```

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -u
 
-PID_FILE="/run/ai-workstation/app/pid"
-PGID_FILE="/run/ai-workstation/app/pgid"
-LOG_FILE="/run/ai-workstation/app/app.log"
+PID_FILE="/run/ai-workstation-cli/app/pid"
+PGID_FILE="/run/ai-workstation-cli/app/pgid"
+LOG_FILE="/run/ai-workstation-cli/app/app.log"
 
 cleanup() {
     rm -f "$PID_FILE" "$PGID_FILE"

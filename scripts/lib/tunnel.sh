@@ -7,7 +7,7 @@
 # `ai preview` can print the public URLs and flag a stale app port.
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation}"
+ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
 TOKEN_FILE="$SECRETS_DIR/cloudflared-token"

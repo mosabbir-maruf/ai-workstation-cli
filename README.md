@@ -2,7 +2,7 @@
 
 > A reusable, isolated AI coding workstation for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS.
 
-[![Platform](https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational)](https://github.com/mosabbir-maruf/ai-workstation)
+[![Platform](https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational)](https://github.com/mosabbir-maruf/ai-workstation-cli)
 [![Runtime](https://img.shields.io/badge/runtime-Docker-blue)](https://www.docker.com/)
 [![AI Runtime](https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black)](https://github.com/deepseek-ai/deepseek-harness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -86,7 +86,7 @@ The system has four major boundaries:
 │                            Ubuntu VPS / Host                               │
 │                                                                            │
 │  ┌──────────────────────┐       ┌───────────────────────────────────────┐  │
-│  │ ~/projects/          │       │ ~/ai-workstation/                     │  │
+│  │ ~/projects/          │       │ ~/ai-workstation-cli/                 │  │
 │  │                      │       │                                       │  │
 │  │ project-a/           │       │ scripts/ai                            │  │
 │  │ project-b/           │       │ docker/                               │  │
@@ -98,7 +98,7 @@ The system has four major boundaries:
 │             │ /workspace mount                   │ Docker Compose          │
 │             ▼                                    ▼                         │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                            ai-workstation                            │  │
+│  │                          ai-workstation-cli                          │  │
 │  │                                                                      │  │
 │  │  User: sandbox (UID 1001)                                            │  │
 │  │  Node.js + Git + SSH client + ripgrep + fd + procps + tini           │  │
@@ -248,7 +248,7 @@ Never commit private keys, tokens, credentials, or `.env`.
 ## Repository Structure
 
 ```text
-ai-workstation/
+ai-workstation-cli/
 ├── .env.example                     # Environment template
 ├── .gitignore                       # Ignored secrets, runtime, and OS files
 ├── CONTRIBUTING.md                  # Contributor guidelines
@@ -303,7 +303,7 @@ ai-workstation/
 
 ```text
 ~/
-├── ai-workstation/
+├── ai-workstation-cli/
 │   ├── .env
 │   ├── .venv/
 │   ├── runtime/
@@ -354,8 +354,8 @@ The included installer validates Docker, Git, Python 3, Docker daemon access, an
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/mosabbir-maruf/ai-workstation.git ~/ai-workstation
-cd ~/ai-workstation
+git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git ~/ai-workstation-cli
+cd ~/ai-workstation-cli
 ```
 
 ---
@@ -393,7 +393,7 @@ ai github test
 `.env.example` currently contains:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/ai-workstation:latest
+IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
 DSH_VERSION=0.1.2-rc.1
 ACTIVE_PROJECT=
 ACTIVE_PROJECT_PATH=
@@ -437,7 +437,7 @@ ai github status
 ai github test
 ```
 
-The private key belongs at `~/ai-workstation/secrets/github-app.pem` (mode `600`). A healthy test reports:
+The private key belongs at `~/ai-workstation-cli/secrets/github-app.pem` (mode `600`). A healthy test reports:
 
 ```text
 GitHub authentication: READY ✓
@@ -949,8 +949,8 @@ Push to main
 Published references:
 
 ```text
-ghcr.io/mosabbir-maruf/ai-workstation:latest
-ghcr.io/mosabbir-maruf/ai-workstation:<commit-sha>
+ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
+ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
 ```
 
 ### Why SHA tags?
@@ -960,7 +960,7 @@ ghcr.io/mosabbir-maruf/ai-workstation:<commit-sha>
 For controlled deployments:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/ai-workstation:<commit-sha>
+IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
 ```
 
 is preferable to relying only on `latest`.
@@ -1147,7 +1147,7 @@ Run the generated SSH command from the client machine and verify that the app is
 ### Image problems
 
 ```bash
-docker image ls ghcr.io/mosabbir-maruf/ai-workstation
+docker image ls ghcr.io/mosabbir-maruf/ai-workstation-cli
 ai doctor
 ```
 

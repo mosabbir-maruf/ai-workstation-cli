@@ -11,7 +11,7 @@ How it stays fast and safe:
 
 ## 1. Create the tunnel (dashboard, once)
 
-1. Cloudflare dashboard -> Zero Trust -> Networks -> Tunnels -> **Create tunnel** -> type **Cloudflared** -> name it (e.g. `ai-workstation`).
+1. Cloudflare dashboard -> Zero Trust -> Networks -> Tunnels -> **Create tunnel** -> type **Cloudflared** -> name it (e.g. `ai-workstation-cli`).
 2. On the **Install and run a connector** screen, select the VPS platform:
    - OS: **Debian** (the VPS is Ubuntu/Debian-based; use Red Hat only on RHEL-family hosts).
    - Architecture: **64-bit** on an amd64 VPS (`uname -m` shows `x86_64`), **arm64-bit** on an ARM VPS.
@@ -77,7 +77,7 @@ What works from anywhere: chat, sessions, workspaces, provider *use*. What needs
 Workarounds (one time):
 
 1. **Via SSH (recommended):** on your machine run `ssh -N -L 4090:<container-ip>:4091 <vps>` (container IP from `ai preview`), open `http://127.0.0.1:4090` (+ token from `ai preview`'s `DSH open:` line) → Settings → Models → Apply. Keys persist server-side.
-2. **File edit:** keys live in `~/ai-workstation/runtime/dsh/settings.yaml` on the VPS (hot-reloaded, no restart). Configure once via method 1, then `cat` that file as the schema template for future edits.
+2. **File edit:** keys live in `~/ai-workstation-cli/runtime/dsh/settings.yaml` on the VPS (hot-reloaded, no restart). Configure once via method 1, then `cat` that file as the schema template for future edits.
 
 Do not chase this error with tunnel, Access, WAF, or header changes — verified end to end: same browser gets `200 OK` on the API through the tunnel while the settings pane still refuses. That combination *is* the signature of this gate.
 
@@ -137,7 +137,7 @@ ai preview
 - Cloudflare error 1033/502: connector down or wrong origin port (compare `ai preview` port with the dashboard route).
 - DSH page loads but `/api/*` returns bare `forbidden`: the DSH browser-trust fence doesn't know the public hostname. `ai tunnel setup` stores it in `DSH_TRUSTED_HOSTS` automatically; if the hostname was added later, set it and recreate the workstation (a plain `ai restart` does not pick up env changes):
   ```bash
-  grep '^DSH_TRUSTED_HOSTS=' ~/ai-workstation/.env || echo "DSH_TRUSTED_HOSTS=<dsh-host>" >> ~/ai-workstation/.env
+  grep '^DSH_TRUSTED_HOSTS=' ~/ai-workstation-cli/.env || echo "DSH_TRUSTED_HOSTS=<dsh-host>" >> ~/ai-workstation-cli/.env
   ai stop && ai start
   ```
 - App 403 Invalid Host: allowlist the hostname (above).

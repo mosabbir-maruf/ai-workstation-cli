@@ -70,7 +70,7 @@ To develop and test AI Workstation locally or on a remote test server, ensure yo
 ## 3. Repository Structure
 
 ```text
-ai-workstation/
+ai-workstation-cli/
 ├── .env.example                     # Environment template
 ├── .gitignore                       # Ignored secrets, runtime, and OS files
 ├── CONTRIBUTING.md                  # Contributor guidelines (this file)
@@ -130,8 +130,8 @@ The following paths are created on the host during installation and runtime. The
 
 1. **Fork and Clone**:
    ```bash
-   git clone https://github.com/<your-username>/ai-workstation.git
-   cd ai-workstation
+   git clone https://github.com/<your-username>/ai-workstation-cli.git
+   cd ai-workstation-cli
    ```
 
 2. **Create a Feature Branch**:
@@ -271,8 +271,8 @@ All shell scripts (`scripts/ai`, `install.sh`, `update.sh`, `docker/*.sh`, `scri
    - Container `/workspace` mounts the active project only (`ACTIVE_PROJECT_PATH`).
    - Host `runtime/dsh` mounts to `/home/sandbox/.dsh`.
    - Host `runtime/npm-global` mounts to `/home/sandbox/.npm-global`.
-   - Host `runtime/app` mounts to `/run/ai-workstation/app`.
-   - Host `runtime/harness` mounts to `/run/ai-workstation/harness`.
+    - Host `runtime/app` mounts to `/run/ai-workstation-cli/app`.
+    - Host `runtime/harness` mounts to `/run/ai-workstation-cli/harness`.
    - Host `runtime/github-broker` mounts to `/run/ai-github-broker`.
 
 ---
@@ -317,7 +317,7 @@ If you modified `scripts/ai`:
 If you modified `docker/Dockerfile` or `docker/compose.yml`:
 - Validate image build:
   ```bash
-  docker build -f docker/Dockerfile -t ai-workstation:test .
+  docker build -f docker/Dockerfile -t ai-workstation-cli:test .
   ```
 - Verify container startup and permissions:
   ```bash
@@ -459,7 +459,7 @@ A good PR description contains:
 
 ## 17. Bug Reporting
 
-If you encounter a bug, submit an issue using our [Bug Report Form](https://github.com/mosabbir-maruf/ai-workstation/issues/new?template=bug_report.yml).
+If you encounter a bug, submit an issue using our [Bug Report Form](https://github.com/mosabbir-maruf/ai-workstation-cli/issues/new?template=bug_report.yml).
 
 Provide:
 - A clear description of the problem.
@@ -476,7 +476,7 @@ Provide:
 
 ## 18. Feature Requests
 
-To suggest a new feature or improvement, open an issue using our [Feature Request Form](https://github.com/mosabbir-maruf/ai-workstation/issues/new?template=feature_request.yml).
+To suggest a new feature or improvement, open an issue using our [Feature Request Form](https://github.com/mosabbir-maruf/ai-workstation-cli/issues/new?template=feature_request.yml).
 
 Good feature proposals:
 - Solve a real operational problem for remote AI development.

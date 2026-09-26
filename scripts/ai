@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation}"
+ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
 ENV_FILE="$ROOT/.env"
 COMPOSE_FILE="$ROOT/docker/compose.yml"
 PROJECTS_DIR="$HOME/projects"
@@ -59,7 +59,7 @@ save_env() {
     tunnel_dsh_host="$(grep '^CLOUDFLARED_DSH_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     tunnel_app_port="$(grep '^CLOUDFLARED_APP_PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
-    image="${image:-${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation:latest}}"
+    image="${image:-${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}}"
     dsh_version="${dsh_version:-${DSH_VERSION:-0.1.2-rc.1}}"
     workstation_root="${workstation_root:-${AI_WORKSTATION_ROOT:-$ROOT}}"
     dsh_trusted_hosts="$(grep '^DSH_TRUSTED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -208,7 +208,7 @@ cmd_use() {
     local workstation_running=0
 
     if docker ps --format '{{.Names}}' |
-       grep -qx ai-workstation; then
+       grep -qx ai-workstation-cli; then
         workstation_running=1
     fi
 
@@ -286,13 +286,13 @@ cmd_push() {
 HARNESS_RUNTIME_DIR="$RUNTIME_DIR/harness"
 
 harness_exec() {
-    docker exec ai-workstation \
+    docker exec ai-workstation-cli \
         /usr/local/bin/harness.sh "$@"
 }
 
 cmd_harness_start() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         die "Workstation is not running."
 
     harness_exec start
@@ -300,7 +300,7 @@ cmd_harness_start() {
 
 cmd_harness_stop() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         return 0
 
     harness_exec stop
@@ -308,7 +308,7 @@ cmd_harness_stop() {
 
 cmd_harness_restart() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         die "Workstation is not running."
 
     harness_exec restart
@@ -316,7 +316,7 @@ cmd_harness_restart() {
 
 cmd_harness_status() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         {
             echo "Harness: stopped (workstation is not running)"
             return 0
@@ -366,9 +366,9 @@ APP_RUNTIME_DIR="$RUNTIME_DIR/app"
 APP_PID_FILE="$APP_RUNTIME_DIR/pid"
 
 app_container_pid() {
-    docker exec ai-workstation sh -lc '
-        if [ -f /run/ai-workstation/app/pid ]; then
-            cat /run/ai-workstation/app/pid
+    docker exec ai-workstation-cli sh -lc '
+        if [ -f /run/ai-workstation-cli/app/pid ]; then
+            cat /run/ai-workstation-cli/app/pid
         fi
     ' 2>/dev/null || true
 }
@@ -379,7 +379,7 @@ app_running() {
 
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
 
-    docker exec ai-workstation sh -lc \
+    docker exec ai-workstation-cli sh -lc \
         "kill -0 $pid 2>/dev/null"
 }
 
@@ -403,7 +403,7 @@ cmd_run() {
     require_active
 
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         die "Workstation is not running. Run: ai start"
 
     if app_running; then
@@ -470,23 +470,23 @@ cmd_run() {
 
     echo "Checking dependencies..."
 
-    if ! docker exec ai-workstation sh -lc '
+    if ! docker exec ai-workstation-cli sh -lc '
         test -d /workspace/node_modules
     '; then
         echo "Dependencies missing. Installing from lockfile..."
 
         case "$manager" in
             npm)
-                docker exec ai-workstation                     sh -lc 'cd /workspace && npm ci'
+                docker exec ai-workstation-cli                     sh -lc 'cd /workspace && npm ci'
                 ;;
             pnpm)
-                docker exec ai-workstation                     sh -lc 'cd /workspace && pnpm install --frozen-lockfile'
+                docker exec ai-workstation-cli                     sh -lc 'cd /workspace && pnpm install --frozen-lockfile'
                 ;;
             yarn)
-                docker exec ai-workstation                     sh -lc 'cd /workspace && yarn install --immutable'
+                docker exec ai-workstation-cli                     sh -lc 'cd /workspace && yarn install --immutable'
                 ;;
             bun)
-                docker exec ai-workstation                     sh -lc 'cd /workspace && bun install --frozen-lockfile'
+                docker exec ai-workstation-cli                     sh -lc 'cd /workspace && bun install --frozen-lockfile'
                 ;;
             *)
                 die "Unsupported package manager: $manager"
@@ -503,7 +503,7 @@ cmd_run() {
     echo "Bind: $bind_note"
     echo "Command: $command"
 
-    docker exec -d ai-workstation \
+    docker exec -d ai-workstation-cli \
         /usr/local/bin/app-runner.sh \
         bash -lc "$command" >/dev/null
 
@@ -523,8 +523,8 @@ cmd_run() {
         echo >&2
         echo "Recent logs:" >&2
 
-        docker exec ai-workstation \
-            sh -lc 'tail -n 80 /run/ai-workstation/app/app.log' >&2 || true
+        docker exec ai-workstation-cli \
+            sh -lc 'tail -n 80 /run/ai-workstation-cli/app/app.log' >&2 || true
 
         rm -f "$APP_PID_FILE"
         return 1
@@ -537,7 +537,7 @@ cmd_run() {
 
 cmd_app_stop() {
     if ! docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation; then
+        grep -qx ai-workstation-cli; then
         echo "Workstation is not running."
         return 0
     fi
@@ -555,13 +555,13 @@ cmd_app_stop() {
     fi
 
     pgid="$(
-        docker exec ai-workstation sh -lc '
-            cat /run/ai-workstation/app/pgid 2>/dev/null || true
+        docker exec ai-workstation-cli sh -lc '
+            cat /run/ai-workstation-cli/app/pgid 2>/dev/null || true
         ' 2>/dev/null || true
     )"
 
     if [[ "$pgid" =~ ^[0-9]+$ ]] && [[ "$pgid" != "1" ]]; then
-        docker exec ai-workstation sh -lc "
+        docker exec ai-workstation-cli sh -lc "
             kill -TERM -- -$pgid 2>/dev/null || true
             sleep 1
 
@@ -576,7 +576,7 @@ cmd_app_stop() {
             kill -KILL $pid 2>/dev/null || true
         " >/dev/null 2>&1 || true
     else
-        docker exec ai-workstation sh -lc "
+        docker exec ai-workstation-cli sh -lc "
             kill -TERM $pid 2>/dev/null || true
             sleep 1
             kill -KILL $pid 2>/dev/null || true
@@ -611,11 +611,11 @@ cmd_app_status() {
 
 cmd_app_logs() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation ||
+        grep -qx ai-workstation-cli ||
         die "Workstation is not running."
 
-    docker exec ai-workstation \
-        sh -lc 'tail -n 100 -f /run/ai-workstation/app/app.log'
+    docker exec ai-workstation-cli \
+        sh -lc 'tail -n 100 -f /run/ai-workstation-cli/app/app.log'
 }
 
 cmd_status() {
@@ -626,14 +626,14 @@ cmd_status() {
     echo "Project path: ${ACTIVE_PROJECT_PATH:-none}"
     echo
 
-    if docker ps --format '{{.Names}}' | grep -qx ai-workstation; then
+    if docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
         echo "Workstation: running"
     else
         echo "Workstation: stopped"
     fi
 
     echo
-    if docker ps --format '{{.Names}}' | grep -qx ai-workstation; then
+    if docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
         harness_exec status || true
     else
         echo "DSH:    stopped"
@@ -651,7 +651,7 @@ cmd_logs() {
 
 cmd_shell() {
     require_active
-    docker exec -it ai-workstation bash
+    docker exec -it ai-workstation-cli bash
 }
 
 cmd_preview() {
@@ -703,7 +703,7 @@ cmd_preview() {
     echo
     echo "Project: $ACTIVE_PROJECT"
 
-    if ! docker ps --format '{{.Names}}' | grep -qx ai-workstation; then
+    if ! docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
         echo "Workstation: stopped"
         echo "Run: ./scripts/ai start"
         return 1
@@ -713,7 +713,7 @@ cmd_preview() {
 
     local container_ip
     container_ip="$(
-        docker inspect ai-workstation \
+        docker inspect ai-workstation-cli \
             --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
             2>/dev/null
     )"
@@ -781,11 +781,11 @@ cmd_dsh_update() {
     local version="${1:-latest}"
 
     if [[ "$version" == "latest" ]]; then
-        docker exec ai-workstation \
+        docker exec ai-workstation-cli \
             npm install --prefix /home/sandbox/.npm-global \
             @deepseek-ai/dsh@latest
     else
-        docker exec ai-workstation \
+        docker exec ai-workstation-cli \
             npm install --prefix /home/sandbox/.npm-global \
             "@deepseek-ai/dsh@$version"
     fi
@@ -794,7 +794,7 @@ cmd_dsh_update() {
 }
 
 cmd_dsh_version() {
-    docker exec ai-workstation         node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js         --version
+    docker exec ai-workstation-cli         node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js         --version
 }
 
 cmd_cache() {
@@ -863,8 +863,8 @@ EOF
         echo
 
         if docker ps --format '{{.Names}}' |
-            grep -qx ai-workstation; then
-            echo "WARNING: ai-workstation is currently running."
+            grep -qx ai-workstation-cli; then
+            echo "WARNING: ai-workstation-cli is currently running."
             echo "The active app may stop working until dependencies are reinstalled."
             echo
         fi
@@ -888,8 +888,8 @@ EOF
     echo "=== Cleaning npm cache ==="
 
     if docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation; then
-        docker exec ai-workstation npm cache clean --force
+        grep -qx ai-workstation-cli; then
+        docker exec ai-workstation-cli npm cache clean --force
     else
         echo "Workstation is not running; npm cache cleanup skipped."
     fi
@@ -1001,8 +1001,8 @@ cmd_doctor() {
     echo "=== Workstation ==="
 
     if docker ps --format '{{.Names}}' |
-       grep -qx ai-workstation; then
-        container_id="$(docker ps -q -f name=^ai-workstation$)"
+       grep -qx ai-workstation-cli; then
+        container_id="$(docker ps -q -f name=^ai-workstation-cli$)"
         container_status="$(docker inspect -f '{{.State.Status}}' "$container_id")"
         image="$(docker inspect -f '{{.Config.Image}}' "$container_id")"
 

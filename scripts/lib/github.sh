@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation}"
+ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
 RUNTIME_DIR="$ROOT/runtime"

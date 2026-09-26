@@ -8,7 +8,7 @@ DSH_PORT="4090"
 BRIDGE_HOST="0.0.0.0"
 BRIDGE_PORT="4091"
 
-RUNTIME_DIR="/run/ai-workstation/harness"
+RUNTIME_DIR="/run/ai-workstation-cli/harness"
 DSH_PID_FILE="$RUNTIME_DIR/dsh.pid"
 BRIDGE_PID_FILE="$RUNTIME_DIR/bridge.pid"
 LOG_FILE="$RUNTIME_DIR/harness.log"
