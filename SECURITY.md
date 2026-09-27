@@ -176,14 +176,17 @@ Host operators must observe the following secret handling standards:
 | `.env` | Environment configuration | `0600` | Host repository root |
 | `secrets/` | Secret storage directory | `0700` | Host repository root |
 | `secrets/github-app.pem` | GitHub App private key | `0600` | Host `secrets/` directory |
+| `secrets/cloudflared-token` | Cloudflare Tunnel token | `0600` | Host `secrets/` directory |
 | `runtime/dsh/.credentials.yaml` | DSH API credentials | `0600` | Host persistent runtime |
+| `WORKSTATION_API_KEY` | Web Console daemon token | (secret string) | Stored inside `.env` (`0600`) |
 
 Secrets must **never** be checked into version control.
 
 ---
 
-## 13. Docker Security Expectations
+## 13. Host Control Daemon & Docker Security
 
+- **Host Daemon Authentication**: When the web control daemon (`ai daemon`) is exposed via reverse proxy or Cloudflare Tunnel, `WORKSTATION_API_KEY` must be configured in `.env`. All incoming requests require valid Bearer token authorization verified via constant-time comparison (`secrets.compare_digest`). Unauthenticated requests are rejected with `401 Unauthorized` before executing system calls.
 - **Host Daemon Protection**: Access to the host Docker daemon should be restricted to administrative users.
 - **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>`) in production environments rather than mutable `latest` tags.
 - **Local Port Bindings**: Ports configured in `compose.yml` (`3000`, `3001`, `8000`, `4090:4091`) must always bind to `127.0.0.1` on the host, never `0.0.0.0`.
