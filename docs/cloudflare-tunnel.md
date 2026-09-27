@@ -31,21 +31,22 @@ ai tunnel status
 
 In the tunnel -> **Public hostnames** -> Add (origin = VPS itself). Only two fields matter; leave everything else at defaults:
 
-| Field | App | DSH |
-|---|---|---|
-| Hostname | `app` | `dsh` |
-| Domain | your domain | your domain |
-| Path | empty | empty |
-| Service Type | `HTTP` | `HTTP` |
-| URL | `127.0.0.1:<app-port>` (real number from `ai preview`, e.g. `127.0.0.1:5173`) | `127.0.0.1:4090` |
+| Field | App (Dev Server) | DSH (AI Engine) | Web API Daemon (Optional) |
+|---|---|---|---|
+| Hostname | `app` | `dsh` | `api` |
+| Domain | your domain | your domain | your domain |
+| Path | empty | empty | empty |
+| Service Type | `HTTP` | `HTTP` | `HTTP` |
+| URL | `127.0.0.1:<app-port>` (from `ai preview`) | `127.0.0.1:4090` | `127.0.0.1:8000` |
 
 Leave at defaults: HTTP Host Header empty, Chunked Encoding Off, timeouts as shown, Enforce Access JWT validation **Off** (the edge Access policy already gates traffic), Applications unselected.
 
 Result:
 
 ```text
-App : https://app.example.com
-DSH : https://dsh.example.com
+App    : https://app.example.com
+DSH    : https://dsh.example.com
+API    : https://api.example.com
 ```
 
 ## More apps

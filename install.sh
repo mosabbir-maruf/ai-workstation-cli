@@ -143,7 +143,7 @@ echo "Checking Python dependencies..."
 echo "✓ PyJWT ready"
 
 # --------------------------------------------------
-# Install AI CLI
+# Install AI CLI & Daemon
 # --------------------------------------------------
 
 echo "Installing ai CLI..."
@@ -151,8 +151,37 @@ echo "Installing ai CLI..."
 sudo ln -sfn     "$ROOT/scripts/ai"     /usr/local/bin/ai
 
 sudo chmod 0755 "$ROOT/scripts/ai"
+chmod 0755 "$ROOT/daemon/server.py"
 
 echo "✓ ai CLI installed"
+
+# Configure Host Daemon Systemd Service
+DAEMON_SERVICE_FILE="/etc/systemd/system/ai-workstation-daemon.service"
+echo "Configuring AI Workstation daemon service..."
+
+sudo tee "$DAEMON_SERVICE_FILE" >/dev/null <<SERVICE
+[Unit]
+Description=AI Workstation Host Control Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=$(id -un)
+WorkingDirectory=$ROOT
+Environment=AI_WORKSTATION_ROOT=$ROOT
+ExecStart=/usr/bin/python3 $ROOT/daemon/server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+sudo systemctl daemon-reload 2>/dev/null || true
+sudo systemctl enable ai-workstation-daemon 2>/dev/null || true
+sudo systemctl restart ai-workstation-daemon 2>/dev/null || true
+
+echo "✓ Host daemon service configured"
 
 # --------------------------------------------------
 # Validation
