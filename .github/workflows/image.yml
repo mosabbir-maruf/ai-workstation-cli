@@ -137,22 +137,14 @@ jobs:
               }
 
               const tags = version.metadata?.container?.tags ?? [];
-              const createdAt = new Date(version.created_at);
 
-              /*
-               * Delete old tagged image versions.
-               *
-               * Also delete untagged versions only when they are older
-               * than the oldest retained tagged image. This prevents
-               * recent provenance/SBOM-related versions from being
-               * deleted while still allowing old registry garbage to
-               * be reclaimed.
-               */
+              // Delete old tagged images beyond retention limit
               if (tags.length > 0) {
                 return true;
               }
 
-              return createdAt < oldestKeptDate;
+              // Also delete untagged builds and dangling intermediate layers
+              return true;
             });
 
             console.log(`Deleting ${versionsToDelete.length} old versions...`);
