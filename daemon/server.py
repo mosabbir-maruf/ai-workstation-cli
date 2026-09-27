@@ -14,6 +14,7 @@ import json
 import os
 import platform
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -57,6 +58,14 @@ def read_env() -> dict:
         except Exception:
             pass
     return values
+
+
+def get_configured_api_key() -> str:
+    env_key = os.environ.get("WORKSTATION_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    file_vals = read_env()
+    return file_vals.get("WORKSTATION_API_KEY", "").strip()
 
 
 def run_cmd(cmd: list, timeout: float = 30.0) -> tuple:
@@ -315,6 +324,43 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # Parse Clean Path
         clean_path = path.split("?")[0].rstrip("/")
+
+        # Bearer Token / API Key Authentication Gate
+        configured_key = get_configured_api_key()
+        if configured_key:
+            # Check Authorization: Bearer <key> or X-API-Key or ?token= (for SSE/downloads)
+            auth_header = headers.get("authorization", "")
+            x_api_key = headers.get("x-api-key", "")
+            provided_token = ""
+
+            if auth_header.lower().startswith("bearer "):
+                provided_token = auth_header[7:].strip()
+            elif x_api_key:
+                provided_token = x_api_key.strip()
+            elif "?" in path:
+                # Support query param for EventSource / direct browser download
+                try:
+                    q_dict = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x)
+                    provided_token = q_dict.get("token", "").strip()
+                except Exception:
+                    pass
+
+            is_valid = secrets.compare_digest(provided_token, configured_key)
+            if not is_valid:
+                err_resp = json.dumps({"ok": False, "output": "Unauthorized: Invalid or missing API key."}).encode("utf-8")
+                resp_headers = (
+                    "HTTP/1.1 401 Unauthorized\r\n"
+                    "Content-Type: application/json; charset=utf-8\r\n"
+                    "Access-Control-Allow-Origin: *\r\n"
+                    "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
+                    "Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key\r\n"
+                    f"Content-Length: {len(err_resp)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8")
+                writer.write(resp_headers + err_resp)
+                await writer.drain()
+                writer.close()
+                return
 
         # SSE Streaming endpoints
         if clean_path in ["/api/logs/app", "/api/logs/workstation", "/api/tunnel/logs"]:
