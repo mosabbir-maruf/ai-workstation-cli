@@ -13,6 +13,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml"><img src="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml/badge.svg" alt="Build AI Workstation" /></a>
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/pkgs/container/ai-workstation-cli"><img src="https://img.shields.io/badge/GHCR-ai--workstation--cli-blue?logo=docker" alt="Docker Image" /></a>
   <a href="https://github.com/mosabbir-maruf/ai-workstation-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/runtime-Docker-blue" alt="Runtime" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black" alt="AI Runtime" /></a>
