@@ -224,7 +224,18 @@ echo "========================================"
 echo
 echo "Next:"
 echo
-echo "  ai doctor"
-echo "  ai github setup"
-echo "  ai list"
+echo "  1. Verify host environment:"
+echo "     ai doctor"
+echo
+echo "  2. Configure GitHub App integration (optional):"
+echo "     ai github setup"
+echo
+echo "  3. Start the Web Dashboard HTTP daemon:"
+echo "     ai daemon status    # (or: ai daemon start)"
+echo "     # Point web console to: http://127.0.0.1:8000 (or via Cloudflare Tunnel)"
+echo
+echo "  4. Add and switch to your first project:"
+echo "     ai add <github-url>"
+echo "     ai use <project-name>"
+echo "     ai start"
 echo
