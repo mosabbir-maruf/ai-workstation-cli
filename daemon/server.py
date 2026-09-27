@@ -43,6 +43,7 @@ DAEMON_HOST = os.environ.get("WORKSTATION_DAEMON_HOST", "127.0.0.1")
 DAEMON_PORT = int(os.environ.get("WORKSTATION_DAEMON_PORT", "8000"))
 
 START_TIME = time.time()
+TIMELINE_BUFFER = []
 
 
 def read_env() -> dict:
@@ -196,7 +197,15 @@ def collect_metrics() -> dict:
     mins, _ = divmod(rem, 60)
     uptime_str = f"{days}d {hours}h {mins}m" if days else f"{hours}h {mins}m"
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # Rolling timeline history buffer (last 12 readings)
+    global TIMELINE_BUFFER
+    TIMELINE_BUFFER.append({"date": now_iso, "cpu": cpu_percent, "memory": mem_percent})
+    if len(TIMELINE_BUFFER) > 12:
+        TIMELINE_BUFFER = TIMELINE_BUFFER[-12:]
+
+    # Memory in Gigabytes for UI charts (matching PieCenter suffix " GB")
+    mem_used_gb = round(mem_used / (1024.0 ** 3), 2)
+    mem_free_gb = round(mem_free / (1024.0 ** 3), 2)
 
     return {
         "memory": {
@@ -207,8 +216,8 @@ def collect_metrics() -> dict:
             "totalFormatted": format_bytes(mem_total),
             "usedFormatted": format_bytes(mem_used),
             "pie": [
-                {"label": "Used", "value": mem_used},
-                {"label": "Free", "value": mem_free},
+                {"label": "Used", "value": mem_used_gb},
+                {"label": "Free", "value": mem_free_gb},
             ],
         },
         "cpu": {
@@ -227,9 +236,7 @@ def collect_metrics() -> dict:
         "throughput": [
             {"month": "Cur", "ingress": 120, "egress": 85, "buffered": 10},
         ],
-        "timeline": [
-            {"date": now_iso, "cpu": cpu_percent, "memory": mem_percent},
-        ],
+        "timeline": list(TIMELINE_BUFFER),
         "uptime": uptime_str,
         "hostname": socket.gethostname(),
         "platform": f"{platform.system()} {platform.release()}",
