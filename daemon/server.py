@@ -197,6 +197,8 @@ def collect_metrics() -> dict:
     mins, _ = divmod(rem, 60)
     uptime_str = f"{days}d {hours}h {mins}m" if days else f"{hours}h {mins}m"
 
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     # Rolling timeline history buffer (last 12 readings)
     global TIMELINE_BUFFER
     TIMELINE_BUFFER.append({"date": now_iso, "cpu": cpu_percent, "memory": mem_percent})
