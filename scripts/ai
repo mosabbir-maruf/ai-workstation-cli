@@ -1550,9 +1550,21 @@ case "${1:-}" in
         DAEMON_SCRIPT="$ROOT/daemon/server.py"
         DAEMON_PID_FILE="$RUNTIME_DIR/daemon.pid"
         DAEMON_LOG_FILE="$RUNTIME_DIR/daemon.log"
+        SERVICE_NAME="ai-workstation-daemon"
+
+        has_systemd_service() {
+            command -v systemctl >/dev/null 2>&1 && [[ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]
+        }
 
         case "${1:-status}" in
             start)
+                if has_systemd_service; then
+                    sudo systemctl start "$SERVICE_NAME"
+                    if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+                        echo "✓ Daemon running via systemd on http://127.0.0.1:8000"
+                        exit 0
+                    fi
+                fi
                 if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE" 2>/dev/null)" 2>/dev/null; then
                     echo "Daemon already running (PID: $(cat "$DAEMON_PID_FILE"))."
                     exit 0
@@ -1571,6 +1583,11 @@ case "${1:-}" in
                 fi
                 ;;
             stop)
+                if has_systemd_service; then
+                    sudo systemctl stop "$SERVICE_NAME"
+                    echo "✓ Daemon stopped via systemd."
+                    exit 0
+                fi
                 if [[ -f "$DAEMON_PID_FILE" ]]; then
                     pid="$(cat "$DAEMON_PID_FILE" 2>/dev/null || true)"
                     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
@@ -1586,10 +1603,19 @@ case "${1:-}" in
                 fi
                 ;;
             restart)
+                if has_systemd_service; then
+                    sudo systemctl restart "$SERVICE_NAME"
+                    echo "✓ Daemon restarted via systemd on http://127.0.0.1:8000"
+                    exit 0
+                fi
                 "$0" daemon stop
                 "$0" daemon start
                 ;;
             status)
+                if has_systemd_service && sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+                    echo "Daemon: running via systemd on http://127.0.0.1:8000"
+                    exit 0
+                fi
                 if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE" 2>/dev/null)" 2>/dev/null; then
                     echo "Daemon: running (PID: $(cat "$DAEMON_PID_FILE")) on http://127.0.0.1:8000"
                 else
@@ -1597,7 +1623,9 @@ case "${1:-}" in
                 fi
                 ;;
             logs)
-                if [[ -f "$DAEMON_LOG_FILE" ]]; then
+                if has_systemd_service; then
+                    sudo journalctl -u "$SERVICE_NAME" -n 100 -f
+                elif [[ -f "$DAEMON_LOG_FILE" ]]; then
                     tail -n 100 -f "$DAEMON_LOG_FILE"
                 else
                     echo "No daemon log found."
