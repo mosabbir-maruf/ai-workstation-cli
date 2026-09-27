@@ -631,6 +631,18 @@ ai state export
 ai state import <archive>
 ```
 
+### Daemon (Web Dashboard API)
+
+```bash
+ai daemon start
+ai daemon stop
+ai daemon restart
+ai daemon status
+ai daemon logs
+```
+
+The daemon runs an asynchronous HTTP server on `127.0.0.1:8000` to serve the [AI Workstation Web Console](https://github.com/mosabbir-maruf/ai-workstation), providing full parity with the CLI and live Server-Sent Events (SSE) log streaming.
+
 ---
 
 ## Project Lifecycle
