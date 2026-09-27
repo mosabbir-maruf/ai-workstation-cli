@@ -653,6 +653,28 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": ok, "output": out}
 
         # 12. Maintenance (Cache & Doctor)
+        elif clean_path == "/api/terminal/exec":
+            command = parsed_json.get("command", "").strip()
+            target = parsed_json.get("target", "host")  # "host" or "workstation"
+            if not command:
+                status_code = 400
+                resp_data = {"ok": False, "output": "No command provided"}
+            else:
+                # Disallow arbitrary system shutdown or root destructive commands if needed
+                if target == "workstation":
+                    # Execute inside the workstation container
+                    if not is_container_running():
+                        status_code = 400
+                        resp_data = {"ok": False, "output": "Workstation container is not running. Start it first."}
+                    else:
+                        cmd = ["docker", "exec", "-i", "ai-workstation-cli", "sh", "-lc", command]
+                        ok, out = run_cmd(cmd, timeout=90.0)
+                        resp_data = {"ok": ok, "output": out}
+                else:
+                    # Execute on host
+                    cmd = ["bash", "-lc", command]
+                    ok, out = run_cmd(cmd, timeout=90.0)
+                    resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/cache":
             ok, out = run_cmd(["ai", "cache"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}

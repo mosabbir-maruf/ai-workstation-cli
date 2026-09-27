@@ -344,6 +344,16 @@ cmd_start() {
 
     compose up -d
 
+    # Wait up to 30 seconds for the container to become running
+    local attempts=0
+    while ! docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; do
+        sleep 1
+        attempts=$((attempts + 1))
+        if [[ "$attempts" -ge 30 ]]; then
+            die "Container ai-workstation-cli failed to start within 30 seconds."
+        fi
+    done
+
     cmd_harness_start
 
     echo "Workstation started."
