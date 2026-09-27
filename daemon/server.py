@@ -245,12 +245,17 @@ def collect_metrics() -> dict:
     }
 
 
-def get_active_project_git_info(project_name: str) -> dict:
+def get_active_project_git_info(project_name: str, custom_path: str = "") -> dict:
     if not project_name:
         return None
-    proj_path = PROJECTS_DIR / project_name
+    proj_path = Path(custom_path) if custom_path and Path(custom_path).is_dir() else (PROJECTS_DIR / project_name)
     if not (proj_path / ".git").is_dir():
-        return None
+        # Fallback search in /home/mosabbir/projects
+        alt_path = Path("/home/mosabbir/projects") / project_name
+        if (alt_path / ".git").is_dir():
+            proj_path = alt_path
+        else:
+            return None
 
     def git_read(args: list) -> str:
         ok, out = run_cmd(["git", "-C", str(proj_path)] + args, timeout=3.0)
@@ -435,14 +440,43 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         elif clean_path == "/api/projects":
             env = read_env()
             active_proj = env.get("ACTIVE_PROJECT", "")
+            active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
+
+            # Search in configured directories
+            search_dirs = []
+            env_projects_dir = env.get("AI_PROJECTS_DIR") or os.environ.get("AI_PROJECTS_DIR")
+            if env_projects_dir:
+                search_dirs.append(Path(env_projects_dir))
+            search_dirs.append(PROJECTS_DIR)
+            search_dirs.append(Path("/home/mosabbir/projects"))
+            if active_proj_path:
+                search_dirs.append(Path(active_proj_path).parent)
+
             projects_list = []
-            if PROJECTS_DIR.is_dir():
-                for p in sorted(PROJECTS_DIR.iterdir()):
-                    if p.is_dir() and (p / ".git").is_dir():
-                        projects_list.append({
-                            "name": p.name,
-                            "active": p.name == active_proj,
-                        })
+            seen_names = set()
+
+            for sdir in search_dirs:
+                if sdir.is_dir():
+                    try:
+                        for p in sorted(sdir.iterdir()):
+                            if p.is_dir() and (p / ".git").is_dir() and p.name not in seen_names:
+                                seen_names.add(p.name)
+                                projects_list.append({
+                                    "name": p.name,
+                                    "active": p.name == active_proj,
+                                    "path": str(p),
+                                })
+                    except Exception:
+                        pass
+
+            # If an active project is configured in .env but was located elsewhere, keep it
+            if active_proj and not any(p["name"] == active_proj for p in projects_list):
+                projects_list.insert(0, {
+                    "name": active_proj,
+                    "active": True,
+                    "path": active_proj_path or str(PROJECTS_DIR / active_proj),
+                })
+
             raw_lines = ["Projects:"]
             for pr in projects_list:
                 mark = "*" if pr["active"] else " "
@@ -455,7 +489,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 "projects": projects_list,
                 "raw": "\n".join(raw_lines),
                 "output": "\n".join(raw_lines),
-                "activeProject": get_active_project_git_info(active_proj),
+                "activeProject": get_active_project_git_info(active_proj, active_proj_path),
             }
         elif clean_path == "/api/projects/use":
             name = parsed_json.get("name", "").strip()
