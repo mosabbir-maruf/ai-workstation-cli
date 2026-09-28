@@ -88,10 +88,12 @@ sync_dsh_config() {
             }
 
             if (key || (m.uiKey === "custom" && baseUrl)) {
+                const modelIds = model.split(",").map((s) => s.trim()).filter(Boolean);
+                const modelList = (modelIds.length ? modelIds : [m.defModel]).map((id) => ({ id, name: id }));
                 if (!defaultRoute) {
                     defaultRoute = m.uiKey === "deepseek"
-                        ? { provider: "deepseek-official", model }
-                        : { provider: m.piKey, model };
+                        ? { provider: "deepseek-official", model: modelList[0].id }
+                        : { provider: m.piKey, model: modelList[0].id };
                 }
                 if (m.piKey) {
                     piProviders[m.piKey] = m.piKey === "custom"
@@ -100,15 +102,23 @@ sync_dsh_config() {
                             ...(key ? { apiKeyEnv: m.env } : {}),
                             api: "openai-completions",
                             baseURL: baseUrl || "http://127.0.0.1:11434/v1",
-                            models: [{ id: model, name: model }],
+                            models: modelList,
                         }
                         : {
                             displayName: m.name,
                             apiKeyEnv: m.env,
+                            models: modelList,
                         };
                 }
             }
         }
+
+        const patchFile = dshDir + "/cordis.patch.yml";
+        const hasDeepseek = Boolean(refs["DEEPSEEK_API_KEY"]);
+        const patchYaml = hasDeepseek
+            ? "- id: llm-deepseek\n  disabled: false\n"
+            : "- id: llm-deepseek\n  disabled: true\n- id: llm-deepseek-account\n  disabled: true\n";
+        fs.writeFileSync(patchFile, patchYaml, { mode: 0o600 });
 
         fs.writeFileSync(credFile, JSON.stringify({ version: 1, refs }, null, 2) + "\n", { mode: 0o600 });
         try { fs.chmodSync(credFile, 0o600); } catch {}
