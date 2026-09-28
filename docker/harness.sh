@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export NARB_DISABLE_NATIVE_CACHE=1
+
 DSH_BIN="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js"
 
 DSH_HOST="127.0.0.1"
@@ -23,7 +25,7 @@ dsh_running() {
 
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
 
-    kill -0 "$pid" 2>/dev/null
+    kill -0 "$pid" 2>/dev/null && (echo >/dev/tcp/127.0.0.1/4090) >/dev/null 2>&1
 }
 
 bridge_running() {

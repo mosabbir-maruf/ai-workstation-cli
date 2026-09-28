@@ -4,6 +4,7 @@ set -euo pipefail
 export HOME=/home/sandbox
 export NPM_CONFIG_PREFIX=/home/sandbox/.npm-global
 export PATH=/home/sandbox/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin
+export NARB_DISABLE_NATIVE_CACHE=1
 
 DSH_VERSION="${DSH_VERSION:-0.1.2-rc.1}"
 DSH_BIN="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js"

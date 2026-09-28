@@ -819,21 +819,27 @@ cmd_dsh_update() {
 
     local version="${1:-latest}"
 
+    cmd_harness_stop || true
+
     if [[ "$version" == "latest" ]]; then
-        docker exec ai-workstation-cli \
+        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
             npm install --prefix /home/sandbox/.npm-global \
             @deepseek-ai/dsh@latest
     else
-        docker exec ai-workstation-cli \
+        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
             npm install --prefix /home/sandbox/.npm-global \
             "@deepseek-ai/dsh@$version"
     fi
+
+    cmd_harness_start || true
 
     echo "DSH updated."
 }
 
 cmd_dsh_version() {
-    docker exec ai-workstation-cli         node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js         --version
+    docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
+        node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js \
+        --version
 }
 
 cmd_cache() {

@@ -14,6 +14,7 @@ services:
       NPM_CONFIG_PREFIX: /home/sandbox/.npm-global
       PATH: /home/sandbox/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
       DSH_VERSION: ${DSH_VERSION:-0.1.2-rc.1}
+      NARB_DISABLE_NATIVE_CACHE: "1"
       HOST: 0.0.0.0
       DSH_TRUSTED_HOSTS: ${DSH_TRUSTED_HOSTS:-${CLOUDFLARED_DSH_HOSTNAME:-}}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-${CLOUDFLARED_APP_HOSTNAME:-}}
