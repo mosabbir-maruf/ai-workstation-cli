@@ -65,7 +65,7 @@ def read_env() -> dict:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                values[k.strip()] = v.strip()
+                values[k.strip()] = v.strip().strip("'\"")
         except Exception:
             pass
     return values
@@ -81,8 +81,13 @@ def get_configured_api_key() -> str:
 
 def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
     try:
+        actual_cmd = list(cmd)
+        if actual_cmd and actual_cmd[0] == "ai":
+            script_path = ROOT / "scripts" / "ai"
+            if script_path.is_file():
+                actual_cmd[0] = str(script_path)
         res = subprocess.run(
-            cmd,
+            actual_cmd,
             input=input_data,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -589,8 +594,18 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         elif clean_path == "/api/preview":
             ok, out = run_cmd(["ai", "preview"], timeout=8.0)
             env = read_env()
-            app_host = env.get("CLOUDFLARED_APP_HOSTNAME", "")
-            dsh_host = env.get("CLOUDFLARED_DSH_HOSTNAME", "")
+            app_host = env.get("CLOUDFLARED_APP_HOSTNAME") or os.environ.get("CLOUDFLARED_APP_HOSTNAME", "")
+            dsh_host = env.get("CLOUDFLARED_DSH_HOSTNAME") or os.environ.get("CLOUDFLARED_DSH_HOSTNAME", "")
+
+            def format_url(host: str) -> str:
+                if not host:
+                    return ""
+                h = host.strip().strip("'\"")
+                if not h:
+                    return ""
+                if h.startswith("http://") or h.startswith("https://"):
+                    return h
+                return f"https://{h}"
 
             dsh_token_url = ""
             if HARNESS_LOG_FILE.is_file():
@@ -598,15 +613,17 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     log_text = HARNESS_LOG_FILE.read_text(errors="replace")
                     match = re.search(r"http://127\.0\.0\.1:4090([^\s'\"]*)", log_text)
                     if match and match.group(1) and match.group(1) != "/":
-                        dsh_token_url = f"https://{dsh_host}{match.group(1)}" if dsh_host else ""
+                        base_dsh = format_url(dsh_host)
+                        if base_dsh:
+                            dsh_token_url = f"{base_dsh}{match.group(1)}"
                 except Exception:
                     pass
 
             resp_data = {
-                "ok": ok,
+                "ok": True,
                 "text": out,
-                "anywhereApp": f"https://{app_host}" if app_host else "",
-                "anywhereDsh": dsh_token_url or (f"https://{dsh_host}" if dsh_host else ""),
+                "anywhereApp": format_url(app_host),
+                "anywhereDsh": dsh_token_url or format_url(dsh_host),
             }
 
         # 10. Tunnel Operations
