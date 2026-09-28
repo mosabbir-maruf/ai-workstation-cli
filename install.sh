@@ -54,6 +54,16 @@ python3 -c 'import venv, ensurepip' >/dev/null 2>&1 ||
     die "Python venv/ensurepip is still unavailable. Install it manually, e.g.: sudo apt-get install -y python3-venv python3-pip"
 
 # --------------------------------------------------
+# Sudoers & journal permissions for daemon & CLI
+# --------------------------------------------------
+echo "Configuring sudoers permissions..."
+SUDOERS_FILE="/etc/sudoers.d/ai-workstation"
+echo "$(id -un) ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" >/dev/null
+sudo chmod 0440 "$SUDOERS_FILE"
+sudo usermod -aG systemd-journal "$(id -un)" 2>/dev/null || true
+echo "✓ Sudoers permissions configured"
+
+# --------------------------------------------------
 # Directory structure
 # --------------------------------------------------
 
