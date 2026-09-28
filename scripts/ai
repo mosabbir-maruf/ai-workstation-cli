@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
+    ROOT="$SCRIPT_ROOT"
+fi
 ENV_FILE="$ROOT/.env"
 COMPOSE_FILE="$ROOT/docker/compose.yml"
 PROJECTS_DIR="$HOME/projects"
@@ -31,6 +35,9 @@ load_env() {
     [[ -n "$env_image" ]] && IMAGE="$env_image"
     [[ -n "$env_dsh_version" ]] && DSH_VERSION="$env_dsh_version"
     [[ -n "$env_root" ]] && AI_WORKSTATION_ROOT="$env_root"
+    if [[ ! -d "${AI_WORKSTATION_ROOT:-}" || ! -f "${AI_WORKSTATION_ROOT:-}/broker/github_broker.py" ]]; then
+        AI_WORKSTATION_ROOT="$ROOT"
+    fi
 
     # Dev-server hostname allowlist: explicit value wins, otherwise fall
     # back to the tunnel app hostname so `ai tunnel setup` wires it up

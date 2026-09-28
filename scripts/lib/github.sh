@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
+    ROOT="$SCRIPT_ROOT"
+fi
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
 RUNTIME_DIR="$ROOT/runtime"
