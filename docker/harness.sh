@@ -80,6 +80,98 @@ start_dsh() {
         sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' "$hmr_file" 2>/dev/null || true
     fi
 
+    # Sync dashboard provider vault (ui-providers.json) into DSH native .credentials.yaml and settings.yaml
+    local env_exports=""
+    env_exports="$(node -e '
+        const fs = require("fs");
+        const dshDir = "/home/sandbox/.dsh";
+        const uiFile = dshDir + "/ui-providers.json";
+        const credFile = dshDir + "/.credentials.yaml";
+        const setFile = dshDir + "/settings.yaml";
+
+        if (!fs.existsSync(uiFile)) process.exit(0);
+        let ui = {};
+        try { ui = JSON.parse(fs.readFileSync(uiFile, "utf8")); } catch { process.exit(0); }
+        const provs = (ui && typeof ui.api_providers === "object" && ui.api_providers) || {};
+
+        const refs = {};
+        const piProviders = {};
+        let defaultRoute = null;
+
+        const map = [
+            { uiKey: "deepseek", env: "DEEPSEEK_API_KEY", piKey: null, name: "DeepSeek", defModel: "deepseek-chat" },
+            { uiKey: "gemini", env: "GEMINI_API_KEY", piKey: "google", name: "Google Gemini", defModel: "gemini-2.5-flash" },
+            { uiKey: "openai", env: "OPENAI_API_KEY", piKey: "openai", name: "OpenAI", defModel: "gpt-4o" },
+            { uiKey: "anthropic", env: "ANTHROPIC_API_KEY", piKey: "anthropic", name: "Anthropic Claude", defModel: "claude-3-7-sonnet-20250219" },
+            { uiKey: "openrouter", env: "OPENROUTER_API_KEY", piKey: "openrouter", name: "OpenRouter", defModel: "deepseek/deepseek-r1" },
+            { uiKey: "groq", env: "GROQ_API_KEY", piKey: "groq", name: "Groq", defModel: "llama-3.3-70b-versatile" },
+            { uiKey: "custom", env: "CUSTOM_API_KEY", piKey: "custom", name: "Custom / Local", defModel: "deepseek-r1" },
+        ];
+
+        for (const m of map) {
+            const entry = provs[m.uiKey] || (m.uiKey === "gemini" ? provs.google : null) || {};
+            const key = String(entry.api_key || "").trim();
+            const model = String(entry.model || "").trim() || m.defModel;
+            const baseUrl = String(entry.base_url || "").trim();
+
+            if (key) {
+                refs[m.env] = key;
+                if (m.uiKey === "gemini") refs["GOOGLE_GENERATIVE_AI_API_KEY"] = key;
+            }
+
+            if (key || (m.uiKey === "custom" && baseUrl)) {
+                if (!defaultRoute) {
+                    defaultRoute = m.uiKey === "deepseek"
+                        ? { provider: "deepseek-official", model }
+                        : { provider: m.piKey, model };
+                }
+                if (m.piKey) {
+                    if (m.piKey === "custom") {
+                        piProviders.custom = {
+                            displayName: m.name,
+                            ...(key ? { apiKeyEnv: m.env } : {}),
+                            api: "openai-completions",
+                            baseURL: baseUrl || "http://127.0.0.1:11434/v1",
+                            models: [{ id: model, name: model }],
+                        };
+                    } else {
+                        piProviders[m.piKey] = {
+                            displayName: m.name,
+                            apiKeyEnv: m.env,
+                        };
+                    }
+                }
+            }
+        }
+
+        const credDoc = { version: 1, refs };
+        fs.writeFileSync(credFile, JSON.stringify(credDoc, null, 2) + "\n", { mode: 0o600 });
+        try { fs.chmodSync(credFile, 0o600); } catch {}
+
+        let settingsDoc = {};
+        if (fs.existsSync(setFile)) {
+            try {
+                const raw = JSON.parse(fs.readFileSync(setFile, "utf8"));
+                if (raw && typeof raw === "object" && !Array.isArray(raw)) settingsDoc = raw;
+            } catch {}
+        }
+        delete settingsDoc.api_providers;
+        settingsDoc["llm-pi-ai"] = { providers: piProviders };
+        if (defaultRoute) {
+            settingsDoc["agent-default-model"] = defaultRoute;
+        }
+        fs.writeFileSync(setFile, JSON.stringify(settingsDoc, null, 2) + "\n", { mode: 0o600 });
+        try { fs.chmodSync(setFile, 0o600); } catch {}
+
+        for (const [k, v] of Object.entries(refs)) {
+            console.log("export " + k + "=" + JSON.stringify(v));
+        }
+    ' 2>/dev/null || true)"
+
+    if [[ -n "$env_exports" ]]; then
+        eval "$env_exports"
+    fi
+
     node --expose-internals "$DSH_BIN" \
         "${dsh_args[@]}" >>"$LOG_FILE" 2>&1 &
 

@@ -40,6 +40,7 @@ RUNTIME_DIR = ROOT / "runtime"
 PROJECTS_DIR = Path.home() / "projects"
 DSH_DIR = RUNTIME_DIR / "dsh"
 DSH_SETTINGS_FILE = DSH_DIR / "settings.yaml"
+DSH_UI_PROVIDERS_FILE = DSH_DIR / "ui-providers.json"
 APP_RUNTIME_DIR = RUNTIME_DIR / "app"
 APP_PID_FILE = APP_RUNTIME_DIR / "pid"
 HARNESS_RUNTIME_DIR = RUNTIME_DIR / "harness"
@@ -764,28 +765,39 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
 
-        # 8. DSH Settings (YAML)
+        # 8. DSH Settings (Provider Vault + Live DSH Credential/Model Sync)
         elif clean_path == "/api/dsh-settings":
             if method == "GET":
                 content = ""
                 mtime = ""
-                if DSH_SETTINGS_FILE.is_file():
+                target_file = DSH_UI_PROVIDERS_FILE if DSH_UI_PROVIDERS_FILE.is_file() else DSH_SETTINGS_FILE
+                if target_file.is_file():
                     try:
-                        content = DSH_SETTINGS_FILE.read_text(encoding="utf-8")
+                        content = target_file.read_text(encoding="utf-8")
                         mtime = datetime.fromtimestamp(
-                            DSH_SETTINGS_FILE.stat().st_mtime, tz=timezone.utc
+                            target_file.stat().st_mtime, tz=timezone.utc
                         ).isoformat()
+                        if target_file == DSH_SETTINGS_FILE and "api_providers" in content:
+                            DSH_UI_PROVIDERS_FILE.write_text(content, encoding="utf-8")
+                            DSH_UI_PROVIDERS_FILE.chmod(0o644)
                     except Exception as e:
                         content = f"# Error reading settings: {e}"
+                if not content.strip():
+                    content = '{\n  "api_providers": {}\n}'
                 resp_data = {"ok": True, "content": content, "mtime": mtime}
             elif method == "POST":
                 new_content = parsed_json.get("content", "")
                 try:
                     DSH_DIR.mkdir(parents=True, exist_ok=True)
-                    DSH_SETTINGS_FILE.write_text(new_content, encoding="utf-8")
-                    DSH_SETTINGS_FILE.chmod(0o600)
+                    DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
+                    DSH_UI_PROVIDERS_FILE.chmod(0o644)
+                    if is_container_running():
+                        await run_cmd_async(["ai", "harness", "restart"], timeout=20.0)
                     invalidate_cache()
-                    resp_data = {"ok": True, "output": "DSH settings saved successfully"}
+                    resp_data = {
+                        "ok": True,
+                        "output": "Provider keys saved to vault and synced into DSH (.credentials.yaml & settings.yaml).",
+                    }
                 except Exception as e:
                     status_code = 500
                     resp_data = {"ok": False, "output": f"Failed to save settings: {e}"}
