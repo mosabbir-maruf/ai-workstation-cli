@@ -59,14 +59,26 @@ load_env() {
     export IMAGE DSH_VERSION AI_WORKSTATION_ROOT ALLOWED_HOSTS
 }
 
+set_env_var() {
+    local key="$1"
+    local value="$2"
+    [[ -f "$ENV_FILE" ]] || cp "$ROOT/.env.example" "$ENV_FILE"
+    if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
 save_env() {
-    local image dsh_version workstation_root dsh_trusted_hosts allowed_hosts
+    local image dsh_version workstation_root dsh_trusted_hosts allowed_hosts workstation_api_key
     local github_app_id github_installation_id github_broker_gid github_broker_socket
     local tunnel_set tunnel_app_host tunnel_dsh_host tunnel_app_port
 
     image="$(grep '^IMAGE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     dsh_version="$(grep '^DSH_VERSION=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     workstation_root="$(grep '^AI_WORKSTATION_ROOT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    workstation_api_key="$(grep '^WORKSTATION_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
     github_app_id="$(grep '^GITHUB_APP_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     github_installation_id="$(grep '^GITHUB_INSTALLATION_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -86,6 +98,7 @@ save_env() {
     fi
     dsh_trusted_hosts="$(grep '^DSH_TRUSTED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
     allowed_hosts="$(grep '^ALLOWED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    workstation_api_key="${workstation_api_key:-${WORKSTATION_API_KEY:-}}"
 
     cat > "$ENV_FILE" <<EOF2
 IMAGE=$image
@@ -95,6 +108,7 @@ ALLOWED_HOSTS=$allowed_hosts
 ACTIVE_PROJECT=${ACTIVE_PROJECT:-}
 ACTIVE_PROJECT_PATH=${ACTIVE_PROJECT_PATH:-}
 AI_WORKSTATION_ROOT=$workstation_root
+WORKSTATION_API_KEY=$workstation_api_key
 GITHUB_APP_ID=$github_app_id
 GITHUB_INSTALLATION_ID=$github_installation_id
 GITHUB_BROKER_SOCKET=$github_broker_socket
@@ -1407,71 +1421,303 @@ cmd_github() {
     esac
 }
 
-usage() {
+setup_colors() {
+    if [[ -t 1 ]]; then
+        _C_CYAN=$'\033[38;5;45m'
+        _C_GREEN=$'\033[38;5;42m'
+        _C_YELLOW=$'\033[38;5;214m'
+        _C_BOLD=$'\033[1m'
+        _C_DIM=$'\033[2m'
+        _C_RESET=$'\033[0m'
+    else
+        _C_CYAN=""
+        _C_GREEN=""
+        _C_YELLOW=""
+        _C_BOLD=""
+        _C_DIM=""
+        _C_RESET=""
+    fi
+}
+
+print_aiws_banner() {
+    setup_colors
+    load_env 2>/dev/null || true
+
+    local proj_badge github_badge tunnel_badge daemon_badge
+    if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
+        proj_badge="${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET}"
+    else
+        proj_badge="${_C_YELLOW}none${_C_RESET}"
+    fi
+
+    if [[ -n "${GITHUB_APP_ID:-}" && -f "$ROOT/secrets/github-app.pem" ]]; then
+        github_badge="${_C_GREEN}ready (#${GITHUB_APP_ID})${_C_RESET}"
+    else
+        github_badge="${_C_DIM}not set${_C_RESET}"
+    fi
+
+    if [[ "${CLOUDFLARED_TOKEN_SET:-}" == "1" ]]; then
+        tunnel_badge="${_C_GREEN}${CLOUDFLARED_APP_HOSTNAME:-active}${_C_RESET}"
+    else
+        tunnel_badge="${_C_DIM}local-only${_C_RESET}"
+    fi
+
+    if (command -v systemctl >/dev/null 2>&1 && sudo -n systemctl is-active --quiet ai-workstation-daemon 2>/dev/null) || \
+       ([[ -f "$RUNTIME_DIR/daemon.pid" ]] && kill -0 "$(cat "$RUNTIME_DIR/daemon.pid" 2>/dev/null)" 2>/dev/null); then
+        daemon_badge="${_C_GREEN}online (:8000)${_C_RESET}"
+    else
+        daemon_badge="${_C_YELLOW}stopped${_C_RESET}"
+    fi
+
     cat <<EOF2
-AI Workstation
+${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮
+│  ${_C_BOLD} █████╗ ██╗██╗    ██╗███████╗     ██████╗██╗     ██╗${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}██╔══██╗██║██║    ██║██╔════╝    ██╔════╝██║     ██║${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}███████║██║██║ █╗ ██║███████╗    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝${_C_RESET}${_C_CYAN}            │
+│  ${_C_DIM}AI Workstation CLI · Containerized Dev & Agent Runtime${_C_RESET}${_C_CYAN}          │
+├──────────────────────────────────────────────────────────────────┤${_C_RESET}
+  ${_C_BOLD}Project:${_C_RESET} $proj_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Daemon:${_C_RESET} $daemon_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}GitHub:${_C_RESET} $github_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Tunnel:${_C_RESET} $tunnel_badge
+${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}
+EOF2
+}
 
-Projects:
-  ai add <github-url>
-  ai remove <project>
-  ai list
-  ai use <project>
+cmd_setup() {
+    print_aiws_banner
+    echo
+    echo "${_C_BOLD}Welcome to the AIWS CLI Interactive Onboarding Flow${_C_RESET}"
+    echo "${_C_DIM}Walk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].${_C_RESET}"
+    echo
 
-Git:
-  ai pull
-  ai push "commit message"
+    # ------------------------------------------------------------------
+    # STEP 1/5: Host Control Daemon & API Security Key
+    # ------------------------------------------------------------------
+    load_env
+    local current_key
+    current_key="$(grep '^WORKSTATION_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 
-Runtime:
-  ai start
-  ai stop
-  ai restart
-  ai status
-  ai logs
-  ai shell
-  ai run
-  ai app stop
-  ai app restart
-  ai app status
-  ai app logs
-  ai preview
+    echo "${_C_CYAN}╭─ [Step 1/5] Host Control Daemon & API Key${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  Secures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard."
+    if [[ -n "$current_key" ]]; then
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured${_C_RESET} (${current_key:0:6}••••••••)"
+    else
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}"
+    fi
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Auto-generate a secure 32-byte API key (Recommended)"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Enter a custom API key"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step"
+    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: s): " step1_choice || true
 
-DSH:
-  ai dsh update [version]
-  ai dsh version
+    case "${step1_choice:-s}" in
+        1)
+            local gen_key
+            gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
+            set_env_var "WORKSTATION_API_KEY" "$gen_key"
+            "$0" daemon restart >/dev/null 2>&1 || "$0" daemon start >/dev/null 2>&1 || true
+            echo "   ${_C_GREEN}✓ Generated WORKSTATION_API_KEY:${_C_RESET} ${_C_BOLD}${gen_key}${_C_RESET}"
+            echo "   ${_C_DIM}(Save this key to enter in your Web Dashboard connection dialog)${_C_RESET}"
+            ;;
+        2)
+            local custom_key
+            read -r -p "   Enter custom WORKSTATION_API_KEY: " custom_key || true
+            if [[ -n "$custom_key" ]]; then
+                set_env_var "WORKSTATION_API_KEY" "$custom_key"
+                "$0" daemon restart >/dev/null 2>&1 || "$0" daemon start >/dev/null 2>&1 || true
+                echo "   ${_C_GREEN}✓ Saved custom WORKSTATION_API_KEY and restarted daemon.${_C_RESET}"
+            else
+                echo "   ${_C_YELLOW}↷ Empty input — skipped.${_C_RESET}"
+            fi
+            ;;
+        *)
+            echo "   ${_C_DIM}↷ Skipped Step 1.${_C_RESET}"
+            ;;
+    esac
+    echo
 
-Maintenance:
-  ai cache
-  ai cache clear
-  ai update
-  ai upgrade
-  ai doctor
+    # ------------------------------------------------------------------
+    # STEP 2/5: GitHub App Credential Broker
+    # ------------------------------------------------------------------
+    load_env
+    echo "${_C_CYAN}╭─ [Step 2/5] GitHub App Integration (Zero-PAT Broker)${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  Enables private repository cloning, pulling & pushing without storing personal tokens."
+    if [[ -n "${GITHUB_APP_ID:-}" && -f "$ROOT/secrets/github-app.pem" ]]; then
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured (App ID: ${GITHUB_APP_ID}, Installation: ${GITHUB_INSTALLATION_ID:-unset})${_C_RESET}"
+    else
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Not configured${_C_RESET}"
+    fi
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai github setup' anytime later)"
+    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step2_choice || true
 
-GitHub:
-  ai github setup
-  ai github status
-  ai github test
+    case "${step2_choice:-s}" in
+        1)
+            cmd_github setup || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: ai github setup${_C_RESET}"
+            ;;
+        *)
+            echo "   ${_C_DIM}↷ Skipped Step 2.${_C_RESET}"
+            ;;
+    esac
+    echo
 
-Tunnel (anywhere access):
-  ai tunnel setup
-  ai tunnel sync [port]
-  ai tunnel status
-  ai tunnel start
-  ai tunnel stop
-  ai tunnel logs
+    # ------------------------------------------------------------------
+    # STEP 3/5: Cloudflare Zero-Trust Tunnel (Anywhere Access)
+    # ------------------------------------------------------------------
+    load_env
+    echo "${_C_CYAN}╭─ [Step 3/5] Cloudflare Tunnel (Anywhere Access)${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  Publishes your App Preview, DSH Agent Web UI & Host API securely over custom domains."
+    if [[ "${CLOUDFLARED_TOKEN_SET:-}" == "1" ]]; then
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured (App: ${CLOUDFLARED_APP_HOSTNAME:-none}, DSH: ${CLOUDFLARED_DSH_HOSTNAME:-none})${_C_RESET}"
+    else
+        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Local-only mode (no tunnel configured)${_C_RESET}"
+    fi
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai tunnel setup' anytime later)"
+    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step3_choice || true
 
-State:
-  ai state export
-  ai state import <archive>
+    case "${step3_choice:-s}" in
+        1)
+            if [[ -f "$TUNNEL_LIB" ]]; then
+                bash "$TUNNEL_LIB" setup || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: ai tunnel setup${_C_RESET}"
+            fi
+            ;;
+        *)
+            echo "   ${_C_DIM}↷ Skipped Step 3.${_C_RESET}"
+            ;;
+    esac
+    echo
 
-Daemon (Web Dashboard HTTP API):
-  ai daemon start
-  ai daemon stop
-  ai daemon restart
-  ai daemon status
+    # ------------------------------------------------------------------
+    # STEP 4/5: First Project Workspace (ai add / ai use)
+    # ------------------------------------------------------------------
+    load_env
+    echo "${_C_CYAN}╭─ [Step 4/5] Workspace Project Onboarding${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  Clone a GitHub repository into ~/projects and mount it as your active /workspace."
+    if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
+        echo "${_C_CYAN}│${_C_RESET}  Current active project: ${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET} (${ACTIVE_PROJECT_PATH:-})"
+    else
+        echo "${_C_CYAN}│${_C_RESET}  Current active project: ${_C_YELLOW}None selected${_C_RESET}"
+    fi
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai add <url>' & 'ai use <name>' later)"
+    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: s): " step4_choice || true
+
+    case "${step4_choice:-s}" in
+        1)
+            local repo_url repo_name
+            read -r -p "   GitHub HTTPS URL (e.g. https://github.com/org/repo): " repo_url || true
+            if [[ -n "$repo_url" ]]; then
+                repo_name="$(basename "${repo_url%/}")"
+                repo_name="${repo_name%.git}"
+                if cmd_add "$repo_url"; then
+                    cmd_use "$repo_name" || true
+                fi
+            else
+                echo "   ${_C_YELLOW}↷ No URL provided — skipped.${_C_RESET}"
+            fi
+            ;;
+        2)
+            echo "   Available projects in $PROJECTS_DIR:"
+            cmd_list || true
+            local chosen_proj
+            read -r -p "   Enter project name to activate: " chosen_proj || true
+            if [[ -n "$chosen_proj" ]]; then
+                cmd_use "$chosen_proj" || true
+            fi
+            ;;
+        *)
+            echo "   ${_C_DIM}↷ Skipped Step 4.${_C_RESET}"
+            ;;
+    esac
+    echo
+
+    # ------------------------------------------------------------------
+    # STEP 5/5: Launch Workstation Runtime & Health Check
+    # ------------------------------------------------------------------
+    load_env
+    echo "${_C_CYAN}╭─ [Step 5/5] Launch Runtime & System Doctor${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  Start the Docker sandbox container, DSH Agent Harness (:4091), and verify host health."
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Start runtime & run 'ai doctor' health check now"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Run 'ai doctor' health check only"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step"
+    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: 1): " step5_choice || true
+
+    case "${step5_choice:-1}" in
+        1)
+            "$0" daemon start >/dev/null 2>&1 || true
+            if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
+                cmd_start || true
+            else
+                echo "   ${_C_YELLOW}! No active project set yet — running 'ai doctor' instead of 'ai start'.${_C_RESET}"
+                cmd_doctor || true
+            fi
+            ;;
+        2)
+            cmd_doctor || true
+            ;;
+        *)
+            echo "   ${_C_DIM}↷ Skipped Step 5.${_C_RESET}"
+            ;;
+    esac
+
+    touch "$RUNTIME_DIR/.setup_done"
+    load_env
+    echo
+    echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}ai setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}ai status${_C_RESET} / ${_C_BOLD}ai doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}ai preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}ai shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
+    echo
+}
+
+usage() {
+    print_aiws_banner
+    cat <<EOF2
+
+${_C_BOLD}Onboarding & Setup:${_C_RESET}
+  ai setup                  Launch interactive flow-style setup wizard (skippable steps)
+  ai doctor                 Run full host, container, DSH & broker diagnostics
+
+${_C_BOLD}Projects:${_C_RESET}
+  ai add <github-url>       Clone a GitHub repository into ~/projects
+  ai use <project>          Set active project and mount into /workspace
+  ai list                   List all cloned projects
+  ai remove <project>       Remove a project from ~/projects
+
+${_C_BOLD}Git (Zero-PAT Broker):${_C_RESET}
+  ai pull                   Pull latest changes in active project
+  ai push "commit message"  Stage, commit, and push changes
+
+${_C_BOLD}Runtime & App:${_C_RESET}
+  ai start | stop | restart Manage container & DSH runtime
+  ai status | logs | shell  Inspect container state, logs, or open interactive bash
+  ai run                    Auto-detect and start project dev server in background
+  ai app {stop|restart|status|logs}
+  ai preview                Show local and Cloudflare Tunnel URLs for active ports
+
+${_C_BOLD}DSH Agent Harness:${_C_RESET}
+  ai harness {start|stop|restart|status}
+  ai dsh update [version]   Update @deepseek-ai/dsh inside persistent volume
+  ai dsh version            Print active DSH version
+
+${_C_BOLD}Integrations & Daemon:${_C_RESET}
+  ai github {setup|status|test}
+  ai tunnel {setup|sync [port]|status|start|stop|logs}
+  ai daemon {start|stop|restart|status|logs}
+  ai state {export|import <archive>}
+  ai cache [clear [--deps] [--yes]]
+  ai update | upgrade
 EOF2
 }
 
 case "${1:-}" in
+    setup|init|onboard) shift; cmd_setup "$@" ;;
     add) shift; cmd_add "$@" ;;
     remove) shift; cmd_remove "$@" ;;
     list) cmd_list ;;
@@ -1681,6 +1927,21 @@ case "${1:-}" in
                 ;;
         esac
         ;;
-    help|--help|-h|"") usage ;;
+    "")
+        load_env 2>/dev/null || true
+        if [[ -t 0 && -t 1 && ! -f "$RUNTIME_DIR/.setup_done" && -z "${ACTIVE_PROJECT:-}" ]]; then
+            print_aiws_banner
+            echo
+            read -r -p "First-time setup detected! Start the guided AIWS Setup Flow now? [Y/n]: " _first_run_ans || true
+            if [[ "${_first_run_ans:-Y}" =~ ^[Yy]$ ]]; then
+                cmd_setup
+                exit 0
+            else
+                touch "$RUNTIME_DIR/.setup_done"
+            fi
+        fi
+        usage
+        ;;
+    help|--help|-h) usage ;;
     *) die "Unknown command: $1" ;;
 esac

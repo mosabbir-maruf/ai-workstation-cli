@@ -19,9 +19,17 @@ die() {
 }
 
 echo
-echo "========================================"
-echo "        AI Workstation Installer"
-echo "========================================"
+cat <<'BANNER'
+╭──────────────────────────────────────────────────────────────────╮
+│   █████╗ ██╗██╗    ██╗███████╗     ██████╗██╗     ██╗            │
+│  ██╔══██╗██║██║    ██║██╔════╝    ██╔════╝██║     ██║            │
+│  ███████║██║██║ █╗ ██║███████╗    ██║     ██║     ██║            │
+│  ██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║            │
+│  ██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║            │
+│  ╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝            │
+│  AIWS CLI Installer · Host Daemon, Broker & Container Runtime    │
+╰──────────────────────────────────────────────────────────────────╯
+BANNER
 echo
 
 # --------------------------------------------------
@@ -253,24 +261,27 @@ echo "Running validation..."
     die "secrets directory missing."
 
 echo
-echo "========================================"
-echo "      AI Workstation installed ✓"
-echo "========================================"
+echo "╭──────────────────────────────────────────────────────────────────╮"
+echo "│  ✓ AIWS CLI Core System Installed Successfully                   │"
+echo "╰──────────────────────────────────────────────────────────────────╯"
 echo
-echo "Next:"
+
+if [[ -t 0 && -t 1 && "${AIWS_SKIP_SETUP:-0}" != "1" ]]; then
+    read -r -p "Launch interactive AIWS CLI Setup Flow now? [Y/s (skip)] (default: Y): " _launch_setup || true
+    if [[ -z "${_launch_setup:-}" || "${_launch_setup}" =~ ^[Yy]$ ]]; then
+        exec "$ROOT/scripts/ai" setup
+    fi
+fi
+
+echo "Skipped interactive setup flow. You can launch it anytime by running:"
 echo
-echo "  1. Verify host environment:"
-echo "     ai doctor"
+echo "  ai setup"
 echo
-echo "  2. Configure GitHub App integration (optional):"
-echo "     ai github setup"
-echo
-echo "  3. Start the Web Dashboard HTTP daemon:"
-echo "     ai daemon status    # (or: ai daemon start)"
-echo "     # Point web console to: http://127.0.0.1:8000 (or via Cloudflare Tunnel)"
-echo
-echo "  4. Add and switch to your first project:"
-echo "     ai add <github-url>"
-echo "     ai use <project-name>"
-echo "     ai start"
+echo "Or configure individual components manually:"
+echo "  1. ai doctor          # Verify host environment"
+echo "  2. ai github setup    # Configure GitHub App integration (optional)"
+echo "  3. ai tunnel setup    # Configure Cloudflare Tunnel (optional)"
+echo "  4. ai add <repo-url>  # Clone a project into ~/projects"
+echo "  5. ai use <project>   # Activate project"
+echo "  6. ai start           # Start container & DSH agent runtime"
 echo
