@@ -671,7 +671,8 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 secrets_dir = ROOT / "secrets"
                 secrets_dir.mkdir(parents=True, exist_ok=True)
                 secrets_dir.chmod(0o700)
-                GITHUB_PEM_FILE.write_text(pem_text)
+                clean_pem = pem_text.strip() + "\n"
+                GITHUB_PEM_FILE.write_text(clean_pem)
                 GITHUB_PEM_FILE.chmod(0o600)
 
                 env_vals = read_env()
@@ -681,8 +682,16 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 ENV_FILE.write_text("\n".join(lines) + "\n")
                 ENV_FILE.chmod(0o600)
 
+                # Ensure runtime and broker dir exist with proper permissions
+                broker_dir = RUNTIME_DIR / "github-broker"
+                broker_dir.mkdir(parents=True, exist_ok=True)
+                run_cmd(["sudo", "chown", "-R", "mosabbir:ai-broker", str(broker_dir)], timeout=5.0)
+                run_cmd(["sudo", "chmod", "770", str(broker_dir)], timeout=5.0)
+
                 # Restart broker service
+                run_cmd(["sudo", "systemctl", "enable", "ai-github-broker"], timeout=5.0)
                 run_cmd(["sudo", "systemctl", "restart", "ai-github-broker"], timeout=10.0)
+                time.sleep(1.0)
                 ok, out = run_cmd(["ai", "github", "test"], timeout=10.0)
                 resp_data = {"ok": ok, "output": out}
 
