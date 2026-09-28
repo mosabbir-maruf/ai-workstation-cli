@@ -535,7 +535,14 @@ cmd_run() {
     echo "Bind: $bind_note"
     echo "Command: $command"
 
-    docker exec -d ai-workstation-cli \
+    load_env
+    local env_allowed_hosts="${ALLOWED_HOSTS:-${CLOUDFLARED_APP_HOSTNAME:-}}"
+    local exec_env_flags=()
+    if [[ -n "$env_allowed_hosts" ]]; then
+        exec_env_flags+=(-e "ALLOWED_HOSTS=$env_allowed_hosts")
+    fi
+
+    docker exec -d "${exec_env_flags[@]}" ai-workstation-cli \
         /usr/local/bin/app-runner.sh \
         bash -lc "$command" >/dev/null
 

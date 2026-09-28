@@ -72,6 +72,12 @@ start_dsh() {
         [[ -n "$entry" ]] && dsh_args+=(--trusted-host "$entry")
     done
 
+    # Ensure DSH headless web mode does not crash when HMR watcher is absent
+    local boot_file="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js"
+    if [[ -f "$boot_file" ]] && grep -q 'if (hmr === void 0) throw' "$boot_file"; then
+        sed -i 's/if (hmr === void 0) throw new Error/if (hmr === void 0) return; if (false) throw new Error/' "$boot_file" 2>/dev/null || true
+    fi
+
     node --expose-internals "$DSH_BIN" \
         "${dsh_args[@]}" >>"$LOG_FILE" 2>&1 &
 
