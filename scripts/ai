@@ -68,55 +68,45 @@ set_env_var() {
     else
         printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
     fi
+    printf -v "$key" '%s' "$value"
+    export "${key?}"
 }
 
 save_env() {
-    local image dsh_version workstation_root dsh_trusted_hosts allowed_hosts workstation_api_key
-    local github_app_id github_installation_id github_broker_gid github_broker_socket
-    local tunnel_set tunnel_app_host tunnel_dsh_host tunnel_app_port
+    local cur_active="${ACTIVE_PROJECT-__UNSET__}"
+    local cur_active_path="${ACTIVE_PROJECT_PATH-__UNSET__}"
+    local cur_dsh_ver="${DSH_VERSION-__UNSET__}"
+    local cur_api_key="${WORKSTATION_API_KEY-__UNSET__}"
 
-    image="$(grep '^IMAGE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    dsh_version="$(grep '^DSH_VERSION=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    workstation_root="$(grep '^AI_WORKSTATION_ROOT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    workstation_api_key="$(grep '^WORKSTATION_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
 
-    github_app_id="$(grep '^GITHUB_APP_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    github_installation_id="$(grep '^GITHUB_INSTALLATION_ID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    github_broker_gid="$(grep '^GITHUB_BROKER_GID=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    github_broker_socket="$(grep '^GITHUB_BROKER_SOCKET=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    [[ "$cur_active" != "__UNSET__" ]] && ACTIVE_PROJECT="$cur_active"
+    [[ "$cur_active_path" != "__UNSET__" ]] && ACTIVE_PROJECT_PATH="$cur_active_path"
+    [[ "$cur_dsh_ver" != "__UNSET__" && -n "$cur_dsh_ver" ]] && DSH_VERSION="$cur_dsh_ver"
+    [[ "$cur_api_key" != "__UNSET__" && -n "$cur_api_key" ]] && WORKSTATION_API_KEY="$cur_api_key"
 
-    tunnel_set="$(grep '^CLOUDFLARED_TOKEN_SET=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    tunnel_app_host="$(grep '^CLOUDFLARED_APP_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    tunnel_dsh_host="$(grep '^CLOUDFLARED_DSH_HOSTNAME=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    tunnel_app_port="$(grep '^CLOUDFLARED_APP_PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-
-    image="${image:-${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}}"
-    dsh_version="${dsh_version:-${DSH_VERSION:-0.1.2-rc.1}}"
-    workstation_root="${workstation_root:-${AI_WORKSTATION_ROOT:-$ROOT}}"
+    local workstation_root="${AI_WORKSTATION_ROOT:-$ROOT}"
     if [[ ! -d "$workstation_root" || ! -f "$workstation_root/broker/github_broker.py" ]]; then
         workstation_root="$ROOT"
     fi
-    dsh_trusted_hosts="$(grep '^DSH_TRUSTED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    allowed_hosts="$(grep '^ALLOWED_HOSTS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
-    workstation_api_key="${workstation_api_key:-${WORKSTATION_API_KEY:-}}"
 
     cat > "$ENV_FILE" <<EOF2
-IMAGE=$image
-DSH_VERSION=$dsh_version
-DSH_TRUSTED_HOSTS=$dsh_trusted_hosts
-ALLOWED_HOSTS=$allowed_hosts
+IMAGE=${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}
+DSH_VERSION=${DSH_VERSION:-0.1.2-rc.1}
+DSH_TRUSTED_HOSTS=${DSH_TRUSTED_HOSTS:-}
+ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
 ACTIVE_PROJECT=${ACTIVE_PROJECT:-}
 ACTIVE_PROJECT_PATH=${ACTIVE_PROJECT_PATH:-}
 AI_WORKSTATION_ROOT=$workstation_root
-WORKSTATION_API_KEY=$workstation_api_key
-GITHUB_APP_ID=$github_app_id
-GITHUB_INSTALLATION_ID=$github_installation_id
-GITHUB_BROKER_SOCKET=$github_broker_socket
-GITHUB_BROKER_GID=$github_broker_gid
-CLOUDFLARED_TOKEN_SET=$tunnel_set
-CLOUDFLARED_APP_HOSTNAME=$tunnel_app_host
-CLOUDFLARED_DSH_HOSTNAME=$tunnel_dsh_host
-CLOUDFLARED_APP_PORT=$tunnel_app_port
+WORKSTATION_API_KEY=${WORKSTATION_API_KEY:-}
+GITHUB_APP_ID=${GITHUB_APP_ID:-}
+GITHUB_INSTALLATION_ID=${GITHUB_INSTALLATION_ID:-}
+GITHUB_BROKER_SOCKET=${GITHUB_BROKER_SOCKET:-}
+GITHUB_BROKER_GID=${GITHUB_BROKER_GID:-}
+CLOUDFLARED_TOKEN_SET=${CLOUDFLARED_TOKEN_SET:-}
+CLOUDFLARED_APP_HOSTNAME=${CLOUDFLARED_APP_HOSTNAME:-}
+CLOUDFLARED_DSH_HOSTNAME=${CLOUDFLARED_DSH_HOSTNAME:-}
+CLOUDFLARED_APP_PORT=${CLOUDFLARED_APP_PORT:-}
 EOF2
 }
 compose() {
@@ -205,19 +195,19 @@ cmd_remove() {
 cmd_list() {
     echo "Projects:"
     shopt -s nullglob
+    load_env
 
     local found=0
+    local dir_name
 
     for dir in "$PROJECTS_DIR"/*; do
         if [[ -d "$dir/.git" ]]; then
             found=1
-
-            load_env
-
-            if [[ "${ACTIVE_PROJECT:-}" == "$(basename "$dir")" ]]; then
-                echo "  * $(basename "$dir")"
+            dir_name="${dir##*/}"
+            if [[ "${ACTIVE_PROJECT:-}" == "$dir_name" ]]; then
+                echo "  * $dir_name"
             else
-                echo "    $(basename "$dir")"
+                echo "    $dir_name"
             fi
         fi
     done
@@ -1439,10 +1429,117 @@ setup_colors() {
     fi
 }
 
+has_daemon_systemd() {
+    command -v systemctl >/dev/null 2>&1 && [[ -f "/etc/systemd/system/ai-workstation-daemon.service" ]]
+}
+
+is_daemon_running() {
+    if has_daemon_systemd && systemctl is-active --quiet ai-workstation-daemon 2>/dev/null; then
+        return 0
+    fi
+    local pid_file="$RUNTIME_DIR/daemon.pid"
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid="$(<"$pid_file")"
+        [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+cmd_daemon() {
+    local action="${1:-status}"
+    local daemon_script="$ROOT/daemon/server.py"
+    local daemon_pid_file="$RUNTIME_DIR/daemon.pid"
+    local daemon_log_file="$RUNTIME_DIR/daemon.log"
+    local service_name="ai-workstation-daemon"
+
+    case "$action" in
+        start)
+            if has_daemon_systemd; then
+                sudo systemctl start "$service_name"
+                if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                    echo "✓ Daemon running via systemd on http://127.0.0.1:8000"
+                    return 0
+                fi
+            fi
+            if is_daemon_running; then
+                echo "Daemon already running."
+                return 0
+            fi
+            echo "Starting AI Workstation Host Control Daemon..."
+            mkdir -p "$RUNTIME_DIR"
+            python3 "$daemon_script" >> "$daemon_log_file" 2>&1 &
+            echo $! > "$daemon_pid_file"
+            sleep 0.3
+            if is_daemon_running; then
+                echo "✓ Daemon started (PID: $(<"$daemon_pid_file")) on http://127.0.0.1:8000"
+            else
+                echo "ERROR: Daemon failed to start. Check $daemon_log_file" >&2
+                rm -f "$daemon_pid_file"
+                return 1
+            fi
+            ;;
+        stop)
+            if has_daemon_systemd; then
+                sudo systemctl stop "$service_name"
+                echo "✓ Daemon stopped via systemd."
+                return 0
+            fi
+            if [[ -f "$daemon_pid_file" ]]; then
+                local pid
+                pid="$(<"$daemon_pid_file")"
+                if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+                    echo "Stopping Daemon (PID: $pid)..."
+                    kill -TERM "$pid" 2>/dev/null || true
+                    sleep 0.3
+                    kill -9 "$pid" 2>/dev/null || true
+                fi
+                rm -f "$daemon_pid_file"
+                echo "✓ Daemon stopped."
+            else
+                echo "Daemon is not running."
+            fi
+            ;;
+        restart)
+            if has_daemon_systemd; then
+                sudo systemctl restart "$service_name"
+                echo "✓ Daemon restarted via systemd on http://127.0.0.1:8000"
+                return 0
+            fi
+            cmd_daemon stop
+            cmd_daemon start
+            ;;
+        status)
+            if has_daemon_systemd && systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                echo "Daemon: running via systemd on http://127.0.0.1:8000"
+                return 0
+            fi
+            if is_daemon_running; then
+                echo "Daemon: running (PID: $(<"$daemon_pid_file")) on http://127.0.0.1:8000"
+            else
+                echo "Daemon: stopped"
+            fi
+            ;;
+        logs)
+            if has_daemon_systemd; then
+                sudo journalctl -u "$service_name" -n 100 -f
+            elif [[ -f "$daemon_log_file" ]]; then
+                tail -n 100 -f "$daemon_log_file"
+            else
+                echo "No daemon log found."
+            fi
+            ;;
+        *)
+            die "Usage: ai daemon {start|stop|restart|status|logs}"
+            ;;
+    esac
+}
+
 print_aiws_banner() {
     setup_colors
     load_env 2>/dev/null || true
 
+    local subtitle="${1:-AI Workstation CLI · Containerized Dev & Agent Runtime}"
     local proj_badge github_badge tunnel_badge daemon_badge
     if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
         proj_badge="${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET}"
@@ -1462,8 +1559,7 @@ print_aiws_banner() {
         tunnel_badge="${_C_DIM}local-only${_C_RESET}"
     fi
 
-    if (command -v systemctl >/dev/null 2>&1 && sudo -n systemctl is-active --quiet ai-workstation-daemon 2>/dev/null) || \
-       ([[ -f "$RUNTIME_DIR/daemon.pid" ]] && kill -0 "$(cat "$RUNTIME_DIR/daemon.pid" 2>/dev/null)" 2>/dev/null); then
+    if is_daemon_running; then
         daemon_badge="${_C_GREEN}online (:8000)${_C_RESET}"
     else
         daemon_badge="${_C_YELLOW}stopped${_C_RESET}"
@@ -1477,7 +1573,7 @@ ${_C_CYAN}╭──────────────────────�
 │  ${_C_BOLD}██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
 │  ${_C_BOLD}██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║${_C_RESET}${_C_CYAN}            │
 │  ${_C_BOLD}╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝${_C_RESET}${_C_CYAN}            │
-│  ${_C_DIM}AI Workstation CLI · Containerized Dev & Agent Runtime${_C_RESET}${_C_CYAN}          │
+│  ${_C_DIM}${subtitle}${_C_RESET}${_C_CYAN}          │
 ├──────────────────────────────────────────────────────────────────┤${_C_RESET}
   ${_C_BOLD}Project:${_C_RESET} $proj_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Daemon:${_C_RESET} $daemon_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}GitHub:${_C_RESET} $github_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Tunnel:${_C_RESET} $tunnel_badge
 ${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}
@@ -1494,9 +1590,7 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 1/5: Host Control Daemon & API Security Key
     # ------------------------------------------------------------------
-    load_env
-    local current_key
-    current_key="$(grep '^WORKSTATION_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    local current_key="${WORKSTATION_API_KEY:-}"
 
     echo "${_C_CYAN}╭─ [Step 1/5] Host Control Daemon & API Key${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Secures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard."
@@ -1515,7 +1609,7 @@ cmd_setup() {
             local gen_key
             gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
             set_env_var "WORKSTATION_API_KEY" "$gen_key"
-            "$0" daemon restart >/dev/null 2>&1 || "$0" daemon start >/dev/null 2>&1 || true
+            cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
             echo "   ${_C_GREEN}✓ Generated WORKSTATION_API_KEY:${_C_RESET} ${_C_BOLD}${gen_key}${_C_RESET}"
             echo "   ${_C_DIM}(Save this key to enter in your Web Dashboard connection dialog)${_C_RESET}"
             ;;
@@ -1524,7 +1618,7 @@ cmd_setup() {
             read -r -p "   Enter custom WORKSTATION_API_KEY: " custom_key || true
             if [[ -n "$custom_key" ]]; then
                 set_env_var "WORKSTATION_API_KEY" "$custom_key"
-                "$0" daemon restart >/dev/null 2>&1 || "$0" daemon start >/dev/null 2>&1 || true
+                cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
                 echo "   ${_C_GREEN}✓ Saved custom WORKSTATION_API_KEY and restarted daemon.${_C_RESET}"
             else
                 echo "   ${_C_YELLOW}↷ Empty input — skipped.${_C_RESET}"
@@ -1539,7 +1633,6 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 2/5: GitHub App Credential Broker
     # ------------------------------------------------------------------
-    load_env
     echo "${_C_CYAN}╭─ [Step 2/5] GitHub App Integration (Zero-PAT Broker)${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Enables private repository cloning, pulling & pushing without storing personal tokens."
     if [[ -n "${GITHUB_APP_ID:-}" && -f "$ROOT/secrets/github-app.pem" ]]; then
@@ -1553,7 +1646,7 @@ cmd_setup() {
 
     case "${step2_choice:-s}" in
         1)
-            cmd_github setup || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: ai github setup${_C_RESET}"
+            cmd_github setup && load_env || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: ai github setup${_C_RESET}"
             ;;
         *)
             echo "   ${_C_DIM}↷ Skipped Step 2.${_C_RESET}"
@@ -1564,7 +1657,6 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 3/5: Cloudflare Zero-Trust Tunnel (Anywhere Access)
     # ------------------------------------------------------------------
-    load_env
     echo "${_C_CYAN}╭─ [Step 3/5] Cloudflare Tunnel (Anywhere Access)${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Publishes your App Preview, DSH Agent Web UI & Host API securely over custom domains."
     if [[ "${CLOUDFLARED_TOKEN_SET:-}" == "1" ]]; then
@@ -1579,7 +1671,7 @@ cmd_setup() {
     case "${step3_choice:-s}" in
         1)
             if [[ -f "$TUNNEL_LIB" ]]; then
-                bash "$TUNNEL_LIB" setup || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: ai tunnel setup${_C_RESET}"
+                bash "$TUNNEL_LIB" setup && load_env || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: ai tunnel setup${_C_RESET}"
             fi
             ;;
         *)
@@ -1591,7 +1683,6 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 4/5: First Project Workspace (ai add / ai use)
     # ------------------------------------------------------------------
-    load_env
     echo "${_C_CYAN}╭─ [Step 4/5] Workspace Project Onboarding${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Clone a GitHub repository into ~/projects and mount it as your active /workspace."
     if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
@@ -1609,7 +1700,8 @@ cmd_setup() {
             local repo_url repo_name
             read -r -p "   GitHub HTTPS URL (e.g. https://github.com/org/repo): " repo_url || true
             if [[ -n "$repo_url" ]]; then
-                repo_name="$(basename "${repo_url%/}")"
+                repo_name="${repo_url%/}"
+                repo_name="${repo_name##*/}"
                 repo_name="${repo_name%.git}"
                 if cmd_add "$repo_url"; then
                     cmd_use "$repo_name" || true
@@ -1636,7 +1728,6 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 5/5: Launch Workstation Runtime & Health Check
     # ------------------------------------------------------------------
-    load_env
     echo "${_C_CYAN}╭─ [Step 5/5] Launch Runtime & System Doctor${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Start the Docker sandbox container, DSH Agent Harness (:4091), and verify host health."
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Start runtime & run 'ai doctor' health check now"
@@ -1646,7 +1737,7 @@ cmd_setup() {
 
     case "${step5_choice:-1}" in
         1)
-            "$0" daemon start >/dev/null 2>&1 || true
+            cmd_daemon start >/dev/null 2>&1 || true
             if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
                 cmd_start || true
             else
@@ -1663,7 +1754,6 @@ cmd_setup() {
     esac
 
     touch "$RUNTIME_DIR/.setup_done"
-    load_env
     echo
     echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
@@ -1717,6 +1807,7 @@ EOF2
 }
 
 case "${1:-}" in
+    banner) shift; print_aiws_banner "$@" ;;
     setup|init|onboard) shift; cmd_setup "$@" ;;
     add) shift; cmd_add "$@" ;;
     remove) shift; cmd_remove "$@" ;;
@@ -1838,94 +1929,7 @@ case "${1:-}" in
         ;;
     daemon)
         shift
-        DAEMON_SCRIPT="$ROOT/daemon/server.py"
-        DAEMON_PID_FILE="$RUNTIME_DIR/daemon.pid"
-        DAEMON_LOG_FILE="$RUNTIME_DIR/daemon.log"
-        SERVICE_NAME="ai-workstation-daemon"
-
-        has_systemd_service() {
-            command -v systemctl >/dev/null 2>&1 && [[ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]
-        }
-
-        case "${1:-status}" in
-            start)
-                if has_systemd_service; then
-                    sudo systemctl start "$SERVICE_NAME"
-                    if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-                        echo "✓ Daemon running via systemd on http://127.0.0.1:8000"
-                        exit 0
-                    fi
-                fi
-                if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-                    echo "Daemon already running (PID: $(cat "$DAEMON_PID_FILE"))."
-                    exit 0
-                fi
-                echo "Starting AI Workstation Host Control Daemon..."
-                mkdir -p "$RUNTIME_DIR"
-                python3 "$DAEMON_SCRIPT" >> "$DAEMON_LOG_FILE" 2>&1 &
-                echo $! > "$DAEMON_PID_FILE"
-                sleep 0.5
-                if kill -0 "$(cat "$DAEMON_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-                    echo "✓ Daemon started (PID: $(cat "$DAEMON_PID_FILE")) on http://127.0.0.1:8000"
-                else
-                    echo "ERROR: Daemon failed to start. Check $DAEMON_LOG_FILE" >&2
-                    rm -f "$DAEMON_PID_FILE"
-                    exit 1
-                fi
-                ;;
-            stop)
-                if has_systemd_service; then
-                    sudo systemctl stop "$SERVICE_NAME"
-                    echo "✓ Daemon stopped via systemd."
-                    exit 0
-                fi
-                if [[ -f "$DAEMON_PID_FILE" ]]; then
-                    pid="$(cat "$DAEMON_PID_FILE" 2>/dev/null || true)"
-                    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-                        echo "Stopping Daemon (PID: $pid)..."
-                        kill -TERM "$pid" 2>/dev/null || true
-                        sleep 0.5
-                        kill -9 "$pid" 2>/dev/null || true
-                    fi
-                    rm -f "$DAEMON_PID_FILE"
-                    echo "✓ Daemon stopped."
-                else
-                    echo "Daemon is not running."
-                fi
-                ;;
-            restart)
-                if has_systemd_service; then
-                    sudo systemctl restart "$SERVICE_NAME"
-                    echo "✓ Daemon restarted via systemd on http://127.0.0.1:8000"
-                    exit 0
-                fi
-                "$0" daemon stop
-                "$0" daemon start
-                ;;
-            status)
-                if has_systemd_service && sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-                    echo "Daemon: running via systemd on http://127.0.0.1:8000"
-                    exit 0
-                fi
-                if [[ -f "$DAEMON_PID_FILE" ]] && kill -0 "$(cat "$DAEMON_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-                    echo "Daemon: running (PID: $(cat "$DAEMON_PID_FILE")) on http://127.0.0.1:8000"
-                else
-                    echo "Daemon: stopped"
-                fi
-                ;;
-            logs)
-                if has_systemd_service; then
-                    sudo journalctl -u "$SERVICE_NAME" -n 100 -f
-                elif [[ -f "$DAEMON_LOG_FILE" ]]; then
-                    tail -n 100 -f "$DAEMON_LOG_FILE"
-                else
-                    echo "No daemon log found."
-                fi
-                ;;
-            *)
-                die "Usage: ai daemon {start|stop|restart|status|logs}"
-                ;;
-        esac
+        cmd_daemon "${1:-status}"
         ;;
     "")
         load_env 2>/dev/null || true
