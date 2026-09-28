@@ -31,68 +31,9 @@ set_env() {
     fi
 }
 
-github_setup() {
-    echo
-    echo "========================================"
-    echo "        GitHub App Setup"
-    echo "========================================"
-    echo
-
-    [[ -f "$BROKER_SCRIPT" ]] ||
-        die "GitHub broker not found."
-
-    [[ -f "$ROOT/docker/compose.yml" ]] ||
-        die "Docker Compose file not found."
-
-    mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
-    chmod 700 "$SECRETS_DIR" "$BROKER_DIR"
-
-    local app_id installation_id pem_path
-
-    read -r -p "GitHub App ID: " app_id
-    [[ "$app_id" =~ ^[0-9]+$ ]] ||
-        die "Invalid App ID."
-
-    read -r -p "GitHub Installation ID: " installation_id
-    [[ "$installation_id" =~ ^[0-9]+$ ]] ||
-        die "Invalid Installation ID."
-
-    echo
-    read -r -p "Private key (.pem) path: " pem_path
-
-    # `read` does not perform tilde expansion, so expand a leading ~/ manually.
-    # Also tolerate surrounding quotes from copy-paste.
-    pem_path="${pem_path%\"}"
-    pem_path="${pem_path#\"}"
-    pem_path="${pem_path%\'}"
-    pem_path="${pem_path#\'}"
-    if [[ "$pem_path" == "~/"* ]]; then
-        pem_path="$HOME/${pem_path:2}"
-    elif [[ "$pem_path" == "~" ]]; then
-        pem_path="$HOME"
-    fi
-
-    [[ -f "$pem_path" ]] ||
-        die "PEM file not found: $pem_path"
-
-    if [[ "$(realpath "$pem_path")" != "$(realpath "$PEM_FILE")" ]]; then
-        cp "$pem_path" "$PEM_FILE"
-    fi
-
-    chmod 600 "$PEM_FILE"
-
-    grep -q "BEGIN .*PRIVATE KEY" "$PEM_FILE" ||
-        die "Invalid PEM private key."
-
-    grep -q "END .*PRIVATE KEY" "$PEM_FILE" ||
-        die "Invalid PEM private key."
-
-    set_env GITHUB_APP_ID "$app_id"
-    set_env GITHUB_INSTALLATION_ID "$installation_id"
-    set_env GITHUB_BROKER_SOCKET "$BROKER_SOCKET"
-
-    echo
-    echo "✓ Credentials saved"
+github_ensure_service() {
+    local current_user
+    current_user="$(id -un)"
 
     if ! getent group ai-broker >/dev/null 2>&1; then
         sudo groupadd --system ai-broker
@@ -102,17 +43,16 @@ github_setup() {
     broker_gid="$(getent group ai-broker | cut -d: -f3)"
 
     set_env GITHUB_BROKER_GID "$broker_gid"
+    set_env GITHUB_BROKER_SOCKET "$BROKER_SOCKET"
 
-    sudo usermod -aG ai-broker "$(id -un)"
+    if ! id -nG "$current_user" | grep -qw "ai-broker"; then
+        sudo usermod -aG ai-broker "$current_user"
+    fi
 
-    sudo chown -R "$(id -un)":ai-broker "$BROKER_DIR"
+    mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
+    chmod 700 "$SECRETS_DIR"
+    sudo chown -R "$current_user":ai-broker "$BROKER_DIR"
     sudo chmod 770 "$BROKER_DIR"
-
-    echo "✓ Broker group configured"
-    echo "✓ Broker GID: $broker_gid"
-
-    echo
-    echo "Configuring GitHub broker..."
 
     sudo tee "$SERVICE_FILE" >/dev/null <<SERVICE
 [Unit]
@@ -122,7 +62,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=$(id -un)
+User=$current_user
 Group=ai-broker
 
 WorkingDirectory=$ROOT
@@ -144,24 +84,6 @@ ReadWritePaths=$RUNTIME_DIR
 [Install]
 WantedBy=multi-user.target
 SERVICE
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE_NAME" >/dev/null
-    sudo systemctl restart "$SERVICE_NAME"
-
-    sleep 1
-
-    sudo systemctl is-active --quiet "$SERVICE_NAME" ||
-        die "GitHub broker failed to start."
-
-    [[ -S "$BROKER_SOCKET" ]] ||
-        die "Broker socket was not created."
-
-    echo "✓ Broker running"
-    echo "✓ Socket ready"
-
-    echo
-    echo "Installing credential helper..."
 
     mkdir -p "$ROOT/docker"
 
@@ -212,8 +134,107 @@ HELPER
 
     chmod +x "$HELPER"
 
-    echo "✓ Credential helper created"
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+}
 
+github_setup() {
+    local app_id="${1:-}"
+    local installation_id="${2:-}"
+    local pem_input="${3:-}"
+
+    [[ -f "$BROKER_SCRIPT" ]] ||
+        die "GitHub broker not found."
+
+    [[ -f "$ROOT/docker/compose.yml" ]] ||
+        die "Docker Compose file not found."
+
+    mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
+    chmod 700 "$SECRETS_DIR" "$BROKER_DIR"
+
+    if [[ -z "$app_id" || -z "$installation_id" || -z "$pem_input" ]]; then
+        echo
+        echo "========================================"
+        echo "        GitHub App Setup"
+        echo "========================================"
+        echo
+
+        read -r -p "GitHub App ID: " app_id
+        [[ "$app_id" =~ ^[0-9]+$ ]] ||
+            die "Invalid App ID."
+
+        read -r -p "GitHub Installation ID: " installation_id
+        [[ "$installation_id" =~ ^[0-9]+$ ]] ||
+            die "Invalid Installation ID."
+
+        echo
+        read -r -p "Private key (.pem) path: " pem_input
+    fi
+
+    [[ "$app_id" =~ ^[0-9]+$ ]] ||
+        die "Invalid App ID: $app_id"
+
+    [[ "$installation_id" =~ ^[0-9]+$ ]] ||
+        die "Invalid Installation ID: $installation_id"
+
+    # Normalize tilde expansion and quotes
+    pem_input="${pem_input%\"}"
+    pem_input="${pem_input#\"}"
+    pem_input="${pem_input%\'}"
+    pem_input="${pem_input#\'}"
+    if [[ "$pem_input" == "~/"* ]]; then
+        pem_input="$HOME/${pem_input:2}"
+    elif [[ "$pem_input" == "~" ]]; then
+        pem_input="$HOME"
+    fi
+
+    if [[ -f "$pem_input" ]]; then
+        if [[ "$(realpath "$pem_input")" != "$(realpath "$PEM_FILE")" ]]; then
+            cp "$pem_input" "$PEM_FILE"
+        fi
+    elif echo "$pem_input" | grep -q "BEGIN .*PRIVATE KEY"; then
+        printf '%s\n' "$pem_input" > "$PEM_FILE"
+    else
+        die "PEM file or private key content invalid or not found."
+    fi
+
+    chmod 600 "$PEM_FILE"
+
+    grep -q "BEGIN .*PRIVATE KEY" "$PEM_FILE" ||
+        die "Invalid PEM private key: missing BEGIN line."
+
+    grep -q "END .*PRIVATE KEY" "$PEM_FILE" ||
+        die "Invalid PEM private key: missing END line."
+
+    set_env GITHUB_APP_ID "$app_id"
+    set_env GITHUB_INSTALLATION_ID "$installation_id"
+
+    echo "Configuring GitHub broker service and permissions..."
+    github_ensure_service
+
+    echo "Starting GitHub broker..."
+    sudo systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+    sudo systemctl restart "$SERVICE_NAME"
+
+    # Poll up to 5s for socket readiness
+    local ready=0
+    for _ in {1..25}; do
+        if [[ -S "$BROKER_SOCKET" ]]; then
+            ready=1
+            break
+        fi
+        sleep 0.2
+    done
+
+    if [[ $ready -eq 0 ]]; then
+        if ! sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+            die "GitHub broker failed to start: $(sudo systemctl status "$SERVICE_NAME" 2>&1 | grep -E "Active:|Failed|Error" | head -n 2 | sed 's/^[ \t]*//')"
+        fi
+        die "Broker socket was not created at $BROKER_SOCKET."
+    fi
+
+    echo "✓ Broker running"
+    echo "✓ Socket ready"
     echo
     echo "GitHub setup infrastructure completed."
     echo
@@ -259,8 +280,29 @@ github_test() {
     [[ -f "$PEM_FILE" ]] ||
         die "Private key is missing."
 
-    [[ -S "$BROKER_SOCKET" ]] ||
-        die "Broker socket is not ready."
+    # Self-healing socket recovery: if service is not running or socket missing, attempt startup
+    if [[ ! -S "$BROKER_SOCKET" ]]; then
+        echo "Broker socket not active, attempting service startup..."
+        github_ensure_service >/dev/null 2>&1 || true
+        sudo systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+        sudo systemctl restart "$SERVICE_NAME" 2>/dev/null || true
+        for _ in {1..15}; do
+            if [[ -S "$BROKER_SOCKET" ]]; then
+                break
+            fi
+            sleep 0.2
+        done
+    fi
+
+    if [[ ! -S "$BROKER_SOCKET" ]]; then
+        local svc_status
+        svc_status="$(sudo systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo "unknown")"
+        if [[ "$svc_status" != "active" ]]; then
+            die "Broker socket is not ready ($SERVICE_NAME is $svc_status). Check: sudo journalctl -u $SERVICE_NAME -n 30 --no-pager"
+        else
+            die "Broker socket is not ready at $BROKER_SOCKET even though $SERVICE_NAME is active. Check directory permissions."
+        fi
+    fi
 
     echo "Testing GitHub App credentials..."
 
@@ -284,7 +326,11 @@ PY
 
 case "${1:-}" in
     setup)
-        github_setup
+        shift
+        github_setup "$@"
+        ;;
+    ensure-service)
+        github_ensure_service
         ;;
     status)
         github_status
@@ -293,7 +339,7 @@ case "${1:-}" in
         github_test
         ;;
     *)
-        echo "Usage: github.sh {setup|status|test}"
+        echo "Usage: github.sh {setup [app_id] [inst_id] [pem]|ensure-service|status|test}"
         exit 1
         ;;
 esac

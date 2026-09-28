@@ -69,6 +69,13 @@ def get_config():
 def create_app_jwt():
     app_id, _ = get_config()
 
+    if not PRIVATE_KEY.is_file():
+        raise RuntimeError(f"Private key not found: {PRIVATE_KEY}")
+
+    private_key = PRIVATE_KEY.read_text().strip()
+    if not private_key:
+        raise RuntimeError(f"Private key is empty: {PRIVATE_KEY}")
+
     now = int(time.time())
 
     payload = {
@@ -76,8 +83,6 @@ def create_app_jwt():
         "exp": now + 540,
         "iss": app_id,
     }
-
-    private_key = PRIVATE_KEY.read_text()
 
     return jwt.encode(
         payload,
@@ -176,11 +181,6 @@ def handle_request(request):
 
 
 def main():
-    if not PRIVATE_KEY.is_file():
-        raise SystemExit(
-            f"Private key not found: {PRIVATE_KEY}"
-        )
-
     SOCKET_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -202,10 +202,16 @@ def main():
 
     server.listen(8)
 
-    print(
-        f"GitHub broker listening on {SOCKET_PATH}",
-        flush=True,
-    )
+    if not PRIVATE_KEY.is_file():
+        print(
+            f"GitHub broker listening on {SOCKET_PATH} (warning: private key {PRIVATE_KEY} not configured yet)",
+            flush=True,
+        )
+    else:
+        print(
+            f"GitHub broker listening on {SOCKET_PATH}",
+            flush=True,
+        )
 
     while True:
         connection, _ = server.accept()

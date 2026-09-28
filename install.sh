@@ -183,6 +183,11 @@ sudo systemctl restart ai-workstation-daemon 2>/dev/null || true
 
 echo "✓ Host daemon service configured"
 
+# Configure GitHub Broker Systemd Service & Permissions
+echo "Configuring GitHub Broker service..."
+bash "$ROOT/scripts/lib/github.sh" ensure-service 2>/dev/null || true
+echo "✓ GitHub broker service configured"
+
 # --------------------------------------------------
 # Validation
 # --------------------------------------------------

@@ -657,6 +657,17 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             ok, out = run_cmd(["ai", "github", "status"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/test":
+            # If socket does not exist, ensure service is configured and started before testing
+            if not GITHUB_BROKER_SOCKET.is_socket():
+                github_script = ROOT / "scripts" / "lib" / "github.sh"
+                if github_script.is_file():
+                    run_cmd(["bash", str(github_script), "ensure-service"], timeout=10.0)
+                run_cmd(["sudo", "systemctl", "reset-failed", "ai-github-broker"], timeout=5.0)
+                run_cmd(["sudo", "systemctl", "restart", "ai-github-broker"], timeout=10.0)
+                for _ in range(15):
+                    if GITHUB_BROKER_SOCKET.is_socket():
+                        break
+                    time.sleep(0.2)
             ok, out = run_cmd(["ai", "github", "test"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/setup":
@@ -682,17 +693,22 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 ENV_FILE.write_text("\n".join(lines) + "\n")
                 ENV_FILE.chmod(0o600)
 
-                # Ensure runtime and broker dir exist with proper permissions
-                broker_dir = RUNTIME_DIR / "github-broker"
-                broker_dir.mkdir(parents=True, exist_ok=True)
-                run_cmd(["sudo", "chown", "-R", "mosabbir:ai-broker", str(broker_dir)], timeout=5.0)
-                run_cmd(["sudo", "chmod", "770", str(broker_dir)], timeout=5.0)
+                # Configure GitHub Broker systemd service & group permissions
+                github_script = ROOT / "scripts" / "lib" / "github.sh"
+                if github_script.is_file():
+                    run_cmd(["bash", str(github_script), "ensure-service"], timeout=10.0)
 
-                # Restart broker service
-                run_cmd(["sudo", "systemctl", "enable", "ai-github-broker"], timeout=5.0)
+                # Reset any failed state and restart broker service
+                run_cmd(["sudo", "systemctl", "reset-failed", "ai-github-broker"], timeout=5.0)
                 run_cmd(["sudo", "systemctl", "restart", "ai-github-broker"], timeout=10.0)
-                time.sleep(1.0)
-                ok, out = run_cmd(["ai", "github", "test"], timeout=10.0)
+
+                # Poll up to 3 seconds for broker socket readiness
+                for _ in range(15):
+                    if GITHUB_BROKER_SOCKET.is_socket():
+                        break
+                    time.sleep(0.2)
+
+                ok, out = run_cmd(["ai", "github", "test"], timeout=15.0)
                 resp_data = {"ok": ok, "output": out}
 
         # 12. Maintenance (Cache & Doctor)
