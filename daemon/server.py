@@ -79,7 +79,7 @@ def get_configured_api_key() -> str:
     return file_vals.get("WORKSTATION_API_KEY", "").strip()
 
 
-def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
+def _run_cmd_sync(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
     try:
         actual_cmd = list(cmd)
         if actual_cmd and actual_cmd[0] == "ai":
@@ -102,17 +102,46 @@ def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
         return False, str(e)
 
 
+def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
+    return _run_cmd_sync(cmd, timeout, input_data)
+
+
+async def run_cmd_async(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _run_cmd_sync, cmd, timeout, input_data)
+
+
+_CACHE = {
+    "overview": {"data": None, "ts": 0.0},
+    "projects": {"data": None, "ts": 0.0},
+}
+CACHE_TTL = 2.5  # seconds
+
+
+def invalidate_cache():
+    _CACHE["overview"]["ts"] = 0.0
+    _CACHE["projects"]["ts"] = 0.0
+
+
+def is_port_open(port: int, host: str = "127.0.0.1", timeout: float = 0.15) -> bool:
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
 def is_container_running(name: str = "ai-workstation-cli") -> bool:
-    ok, out = run_cmd(["docker", "ps", "--format", "{{.Names}}"], timeout=5.0)
+    ok, out = _run_cmd_sync(["docker", "ps", "--format", "{{.Names}}"], timeout=4.0)
     if ok and out:
         return any(line.strip() == name for line in out.splitlines())
     return False
 
 
 def get_container_ip() -> str:
-    ok, out = run_cmd(
+    ok, out = _run_cmd_sync(
         ["docker", "inspect", "ai-workstation-cli", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"],
-        timeout=4.0,
+        timeout=3.0,
     )
     if ok and out:
         ip = out.strip().splitlines()[0] if out.splitlines() else ""
@@ -124,20 +153,26 @@ def get_container_ip() -> str:
 def get_detected_ports() -> list:
     ports_script = ROOT / "scripts" / "lib" / "ports.sh"
     if ports_script.is_file():
-        ok, out = run_cmd(["bash", str(ports_script)], timeout=5.0)
+        ok, out = _run_cmd_sync(["bash", str(ports_script)], timeout=4.0)
         if ok and out:
             return [p.strip() for p in out.split() if p.strip()]
     return []
 
 
-def is_app_running() -> bool:
+def is_app_running(container_ok: bool = None) -> bool:
+    if container_ok is False:
+        return False
     if not APP_PID_FILE.is_file():
         return False
     try:
         pid = APP_PID_FILE.read_text().strip()
         if not pid.isdigit():
             return False
-        ok, _ = run_cmd(["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"], timeout=3.0)
+        if container_ok is None:
+            container_ok = is_container_running()
+        if not container_ok:
+            return False
+        ok, _ = _run_cmd_sync(["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"], timeout=2.0)
         return ok
     except Exception:
         return False
@@ -151,7 +186,12 @@ def format_bytes(b: int) -> str:
     return f"{b:.1f} PB"
 
 
-def collect_metrics() -> dict:
+def collect_metrics(
+    container_ok: bool = None,
+    app_ok: bool = None,
+    broker_ok: bool = None,
+    tunnel_ok: bool = None,
+) -> dict:
     # Memory
     mem_total = 0
     mem_used = 0
@@ -187,18 +227,26 @@ def collect_metrics() -> dict:
         load_tuple = (0.0, 0.0, 0.0)
     cpu_percent = min(100.0, round((load_tuple[0] / cores) * 100, 1))
 
-    # Docker & system containers/daemons
+    # Subsystem active checks (reusing pre-checked values when available)
+    if container_ok is None:
+        container_ok = is_container_running()
+    if app_ok is None:
+        app_ok = is_app_running(container_ok=container_ok)
+    if broker_ok is None:
+        broker_ok = GITHUB_BROKER_SOCKET.is_socket()
+    if tunnel_ok is None:
+        ok, _ = _run_cmd_sync(["systemctl", "is-active", "--quiet", "cloudflared"], timeout=1.0)
+        tunnel_ok = ok
+
     total_daemons = 5
     active_daemons = 0
-    if is_container_running():
+    if container_ok:
         active_daemons += 2  # Container + DSH
-    if is_app_running():
+    if app_ok:
         active_daemons += 1
-    if GITHUB_BROKER_SOCKET.is_socket():
+    if broker_ok:
         active_daemons += 1
-    # Cloudflared active check
-    ok, _ = run_cmd(["systemctl", "is-active", "--quiet", "cloudflared"], timeout=2.0)
-    if ok:
+    if tunnel_ok:
         active_daemons += 1
 
     # Uptime
@@ -292,6 +340,119 @@ def get_active_project_git_info(project_name: str, custom_path: str = "") -> dic
         "lastCommitTime": last_time,
         "dirtyFilesCount": dirty_count,
     }
+
+
+def get_fast_overview() -> dict:
+    now = time.time()
+    cached = _CACHE["overview"]["data"]
+    if cached and (now - _CACHE["overview"]["ts"] < CACHE_TTL):
+        return cached
+
+    env = read_env()
+    active_proj = env.get("ACTIVE_PROJECT", "")
+    active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
+
+    container_ok = is_container_running()
+
+    app_ok = False
+    app_pid = "—"
+    if container_ok and APP_PID_FILE.is_file():
+        try:
+            pid_raw = APP_PID_FILE.read_text().strip()
+            if pid_raw.isdigit():
+                app_pid = pid_raw
+                app_port = int(env.get("CLOUDFLARED_APP_PORT", "5173"))
+                if is_port_open(app_port):
+                    app_ok = True
+                else:
+                    ok, _ = _run_cmd_sync(["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {app_pid} 2>/dev/null"], timeout=1.5)
+                    app_ok = ok
+        except Exception:
+            pass
+
+    harness_active = False
+    if container_ok:
+        if is_port_open(4091):
+            harness_active = True
+        elif HARNESS_LOG_FILE.is_file():
+            try:
+                if (now - HARNESS_LOG_FILE.stat().st_mtime) < 180:
+                    harness_active = True
+            except Exception:
+                pass
+
+    broker_online = GITHUB_BROKER_SOCKET.is_socket()
+
+    tunnel_online = False
+    if env.get("CLOUDFLARED_TOKEN_SET") == "1":
+        ok, _ = _run_cmd_sync(["systemctl", "is-active", "--quiet", "cloudflared"], timeout=1.0)
+        tunnel_online = ok
+
+    git_info = get_active_project_git_info(active_proj, active_proj_path)
+
+    app_host = env.get("CLOUDFLARED_APP_HOSTNAME") or os.environ.get("CLOUDFLARED_APP_HOSTNAME", "")
+    dsh_host = env.get("CLOUDFLARED_DSH_HOSTNAME") or os.environ.get("CLOUDFLARED_DSH_HOSTNAME", "")
+
+    def format_url(host: str) -> str:
+        if not host:
+            return ""
+        h = host.strip().strip("'\"")
+        if not h:
+            return ""
+        if h.startswith("http://") or h.startswith("https://"):
+            return h
+        return f"https://{h}"
+
+    dsh_token_url = ""
+    if HARNESS_LOG_FILE.is_file():
+        try:
+            log_text = HARNESS_LOG_FILE.read_text(errors="replace")
+            match = re.search(r"http://127\.0\.0\.1:4090([^\s'\"]*)", log_text)
+            if match and match.group(1) and match.group(1) != "/":
+                base_dsh = format_url(dsh_host)
+                if base_dsh:
+                    dsh_token_url = f"{base_dsh}{match.group(1)}"
+        except Exception:
+            pass
+
+    metrics_data = collect_metrics(
+        container_ok=container_ok,
+        app_ok=app_ok,
+        broker_ok=broker_online,
+        tunnel_ok=tunnel_online,
+    )
+
+    data = {
+        "ok": True,
+        "health": True,
+        "workstation": {
+            "running": container_ok,
+            "status": "running" if container_ok else "stopped",
+        },
+        "app": {
+            "running": app_ok,
+            "pid": app_pid if app_ok else "—",
+        },
+        "harness": {
+            "active": harness_active,
+        },
+        "broker": {
+            "online": broker_online,
+        },
+        "tunnel": {
+            "online": tunnel_online,
+        },
+        "activeProject": git_info,
+        "preview": {
+            "anywhereApp": format_url(app_host),
+            "anywhereDsh": dsh_token_url or format_url(dsh_host),
+        },
+        "metrics": metrics_data,
+    }
+
+    _CACHE["overview"]["data"] = data
+    _CACHE["overview"]["ts"] = now
+    return data
 
 
 # Request Router
@@ -405,11 +566,16 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         if clean_path == "/api/health":
             resp_data = {"ok": True, "output": "Host workstation daemon active."}
 
+        # 1.1 Fast Unified Overview
+        elif clean_path == "/api/overview":
+            resp_data = get_fast_overview()
+
         # 2. Status & Overview
         elif clean_path == "/api/status":
+            overview = get_fast_overview()
+            container_ok = overview["workstation"]["running"]
+            app_ok = overview["app"]["running"]
             env = read_env()
-            container_ok = is_container_running()
-            app_ok = is_app_running()
             active_proj = env.get("ACTIVE_PROJECT", "")
 
             # Output string matching CLI `ai status`
@@ -424,33 +590,57 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             resp_data = {
                 "ok": True,
                 "output": "\n".join(summary),
-                "metrics": collect_metrics(),
+                "metrics": overview["metrics"],
             }
 
         # 3. Workstation Container Lifecycle
         elif clean_path == "/api/workstation/start":
-            ok, out = run_cmd(["ai", "start"], timeout=300.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "start"], timeout=300.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/stop":
-            ok, out = run_cmd(["ai", "stop"], timeout=60.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "stop"], timeout=60.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/restart":
-            ok, out = run_cmd(["ai", "restart"], timeout=300.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "restart"], timeout=300.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
 
         # 4. App Lifecycle inside container
         elif clean_path == "/api/app/run":
-            ok, out = run_cmd(["ai", "run"], timeout=180.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "run"], timeout=180.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/stop":
-            ok, out = run_cmd(["ai", "app", "stop"], timeout=30.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "app", "stop"], timeout=30.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/restart":
-            ok, out = run_cmd(["ai", "app", "restart"], timeout=180.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "app", "restart"], timeout=180.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/status":
-            ok, out = run_cmd(["ai", "app", "status"], timeout=10.0)
-            resp_data = {"ok": ok, "output": out}
+            overview = get_fast_overview()
+            app_ok = overview["app"]["running"]
+            app_pid = overview["app"]["pid"]
+            env = read_env()
+            active_proj = env.get("ACTIVE_PROJECT", "none")
+
+            summary = [
+                "=== Project ===",
+                f"Project: {active_proj or 'none'}",
+                f"Status: {'running' if app_ok else 'stopped'}",
+            ]
+            if app_ok and app_pid and app_pid != "—":
+                summary.append(f"PID: {app_pid}")
+            resp_data = {"ok": True, "output": "\n".join(summary)}
 
         # 5. Projects
         elif clean_path == "/api/projects":
@@ -543,26 +733,40 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 7. Harness & DSH
         elif clean_path == "/api/harness/start":
-            ok, out = run_cmd(["ai", "harness", "start"], timeout=30.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "harness", "start"], timeout=30.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/stop":
-            ok, out = run_cmd(["ai", "harness", "stop"], timeout=15.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "harness", "stop"], timeout=15.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/restart":
-            ok, out = run_cmd(["ai", "harness", "restart"], timeout=30.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "harness", "restart"], timeout=30.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/status":
-            ok, out = run_cmd(["ai", "harness", "status"], timeout=5.0)
-            resp_data = {"ok": ok, "output": out}
+            overview = get_fast_overview()
+            harness_ok = overview["harness"]["active"]
+            summary = [
+                "=== Harness ===",
+                f"DSH:    {'running' if harness_ok else 'stopped'}",
+                f"Bridge: {'running' if harness_ok else 'stopped'}",
+            ]
+            resp_data = {"ok": True, "output": "\n".join(summary)}
         elif clean_path == "/api/dsh/version":
-            ok, out = run_cmd(["ai", "dsh", "version"], timeout=5.0)
+            ok, out = await run_cmd_async(["ai", "dsh", "version"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/dsh/update":
+            invalidate_cache()
             ver = parsed_json.get("version", "").strip()
             cmd = ["ai", "dsh", "update"]
             if ver:
                 cmd.append(ver)
-            ok, out = run_cmd(cmd, timeout=180.0)
+            ok, out = await run_cmd_async(cmd, timeout=180.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
 
         # 8. DSH Settings (YAML)
@@ -585,6 +789,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     DSH_DIR.mkdir(parents=True, exist_ok=True)
                     DSH_SETTINGS_FILE.write_text(new_content, encoding="utf-8")
                     DSH_SETTINGS_FILE.chmod(0o600)
+                    invalidate_cache()
                     resp_data = {"ok": True, "output": "DSH settings saved successfully"}
                 except Exception as e:
                     status_code = 500
@@ -592,56 +797,70 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 9. Preview & Anywhere URLs
         elif clean_path == "/api/preview":
-            ok, out = run_cmd(["ai", "preview"], timeout=8.0)
+            overview = get_fast_overview()
             env = read_env()
-            app_host = env.get("CLOUDFLARED_APP_HOSTNAME") or os.environ.get("CLOUDFLARED_APP_HOSTNAME", "")
-            dsh_host = env.get("CLOUDFLARED_DSH_HOSTNAME") or os.environ.get("CLOUDFLARED_DSH_HOSTNAME", "")
+            active_proj = env.get("ACTIVE_PROJECT", "none")
+            container_ok = overview["workstation"]["running"]
+            detected_port = env.get("CLOUDFLARED_APP_PORT", "5173")
+            app_url = overview["preview"]["anywhereApp"]
+            dsh_url = overview["preview"]["anywhereDsh"]
 
-            def format_url(host: str) -> str:
-                if not host:
-                    return ""
-                h = host.strip().strip("'\"")
-                if not h:
-                    return ""
-                if h.startswith("http://") or h.startswith("https://"):
-                    return h
-                return f"https://{h}"
-
-            dsh_token_url = ""
-            if HARNESS_LOG_FILE.is_file():
-                try:
-                    log_text = HARNESS_LOG_FILE.read_text(errors="replace")
-                    match = re.search(r"http://127\.0\.0\.1:4090([^\s'\"]*)", log_text)
-                    if match and match.group(1) and match.group(1) != "/":
-                        base_dsh = format_url(dsh_host)
-                        if base_dsh:
-                            dsh_token_url = f"{base_dsh}{match.group(1)}"
-                except Exception:
-                    pass
-
+            text_lines = [
+                "=== Preview ===",
+                "",
+                f"Project: {active_proj}",
+                f"Workstation: {'running' if container_ok else 'stopped'}",
+                "",
+                f"Detected app port(s): {detected_port}",
+                "",
+                "Anywhere URLs:",
+                f"  App : {app_url or 'Not configured'}",
+                f"  DSH : {dsh_url or 'Not configured'}",
+            ]
             resp_data = {
                 "ok": True,
-                "text": out,
-                "anywhereApp": format_url(app_host),
-                "anywhereDsh": dsh_token_url or format_url(dsh_host),
+                "text": "\n".join(text_lines),
+                "anywhereApp": app_url,
+                "anywhereDsh": dsh_url,
             }
 
         # 10. Tunnel Operations
         elif clean_path == "/api/tunnel/status":
-            ok, out = run_cmd(["ai", "tunnel", "status"], timeout=5.0)
-            resp_data = {"ok": ok, "output": out}
+            overview = get_fast_overview()
+            env = read_env()
+            app_h = env.get("CLOUDFLARED_APP_HOSTNAME", "none")
+            dsh_h = env.get("CLOUDFLARED_DSH_HOSTNAME", "none")
+            app_p = env.get("CLOUDFLARED_APP_PORT", "none")
+            token_set = "configured" if env.get("CLOUDFLARED_TOKEN_SET") == "1" else "none"
+            running_str = "running" if overview["tunnel"]["online"] else "stopped"
+
+            out = (
+                "=== Cloudflare Tunnel ===\n\n"
+                f"Connector token: {token_set}\n"
+                f"App hostname:  {app_h}\n"
+                f"DSH hostname:  {dsh_h}\n"
+                f"App port:      {app_p}\n\n"
+                f"Connector:     {running_str}"
+            )
+            resp_data = {"ok": True, "output": out}
         elif clean_path == "/api/tunnel/start":
-            ok, out = run_cmd(["ai", "tunnel", "start"], timeout=15.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "tunnel", "start"], timeout=15.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/tunnel/stop":
-            ok, out = run_cmd(["ai", "tunnel", "stop"], timeout=15.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "tunnel", "stop"], timeout=15.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/tunnel/sync":
+            invalidate_cache()
             port = parsed_json.get("port")
             cmd = ["ai", "tunnel", "sync"]
             if port is not None:
                 cmd.append(str(port))
-            ok, out = run_cmd(cmd, timeout=15.0)
+            ok, out = await run_cmd_async(cmd, timeout=15.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/tunnel/setup":
             token = parsed_json.get("token", "").strip()
