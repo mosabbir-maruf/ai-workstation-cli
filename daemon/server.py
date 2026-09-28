@@ -792,11 +792,14 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
                     DSH_UI_PROVIDERS_FILE.chmod(0o644)
                     if is_container_running():
-                        await run_cmd_async(["ai", "harness", "restart"], timeout=20.0)
+                        await run_cmd_async(
+                            ["docker", "exec", "ai-workstation-cli", "/usr/local/bin/harness.sh", "sync"],
+                            timeout=5.0,
+                        )
                     invalidate_cache()
                     resp_data = {
                         "ok": True,
-                        "output": "Provider keys saved to vault and synced into DSH (.credentials.yaml & settings.yaml).",
+                        "output": "Provider keys saved to vault and live-synced into DSH (.credentials.yaml & settings.yaml).",
                     }
                 except Exception as e:
                     status_code = 500

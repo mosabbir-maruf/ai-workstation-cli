@@ -49,40 +49,8 @@ cleanup_stale_state() {
     fi
 }
 
-start_dsh() {
-    if dsh_running; then
-        return 0
-    fi
-
-    echo "Starting DSH..."
-
-    # Pin the invoking directory to the active project so the workspace
-    # picker opens on project files instead of the sandbox HOME
-    # (which holds only hidden files).
-    cd /workspace 2>/dev/null || {
-        echo "ERROR: workspace mount missing" >&2
-        return 1
-    }
-
-    # Extra authorities the DSH /api browser-trust fence accepts
-    # (e.g. the public Cloudflare hostname). Space/comma-separated
-    # via DSH_TRUSTED_HOSTS; unset means local-only trust.
-    local dsh_args=(web --host "$DSH_HOST" --port "$DSH_PORT" --no-open)
-    local trusted="${DSH_TRUSTED_HOSTS:-}"
-    local entry
-    for entry in ${trusted//,/ }; do
-        [[ -n "$entry" ]] && dsh_args+=(--trusted-host "$entry")
-    done
-
-    # Patch dsh-hmr only once if needed (instant check vs full node_modules scan)
-    local hmr_file="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh-hmr/lib/index.js"
-    if [[ -f "$hmr_file" ]] && grep -q 'if (hmr === void 0) throw' "$hmr_file" 2>/dev/null; then
-        sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' "$hmr_file" 2>/dev/null || true
-    fi
-
-    # Sync dashboard provider vault (ui-providers.json) into DSH native .credentials.yaml and settings.yaml
-    local env_exports=""
-    env_exports="$(node -e '
+sync_dsh_config() {
+    node -e '
         const fs = require("fs");
         const dshDir = "/home/sandbox/.dsh";
         const uiFile = dshDir + "/ui-providers.json";
@@ -126,26 +94,23 @@ start_dsh() {
                         : { provider: m.piKey, model };
                 }
                 if (m.piKey) {
-                    if (m.piKey === "custom") {
-                        piProviders.custom = {
+                    piProviders[m.piKey] = m.piKey === "custom"
+                        ? {
                             displayName: m.name,
                             ...(key ? { apiKeyEnv: m.env } : {}),
                             api: "openai-completions",
                             baseURL: baseUrl || "http://127.0.0.1:11434/v1",
                             models: [{ id: model, name: model }],
-                        };
-                    } else {
-                        piProviders[m.piKey] = {
+                        }
+                        : {
                             displayName: m.name,
                             apiKeyEnv: m.env,
                         };
-                    }
                 }
             }
         }
 
-        const credDoc = { version: 1, refs };
-        fs.writeFileSync(credFile, JSON.stringify(credDoc, null, 2) + "\n", { mode: 0o600 });
+        fs.writeFileSync(credFile, JSON.stringify({ version: 1, refs }, null, 2) + "\n", { mode: 0o600 });
         try { fs.chmodSync(credFile, 0o600); } catch {}
 
         let settingsDoc = {};
@@ -166,8 +131,36 @@ start_dsh() {
         for (const [k, v] of Object.entries(refs)) {
             console.log("export " + k + "=" + JSON.stringify(v));
         }
-    ' 2>/dev/null || true)"
+    ' 2>/dev/null || true
+}
 
+start_dsh() {
+    if dsh_running; then
+        return 0
+    fi
+
+    echo "Starting DSH..."
+
+    cd /workspace 2>/dev/null || {
+        echo "ERROR: workspace mount missing" >&2
+        return 1
+    }
+
+    local dsh_args=(web --host "$DSH_HOST" --port "$DSH_PORT" --no-open)
+    local trusted="${DSH_TRUSTED_HOSTS:-}"
+    local entry
+    for entry in ${trusted//,/ }; do
+        [[ -n "$entry" ]] && dsh_args+=(--trusted-host "$entry")
+    done
+
+    # Patch dsh-hmr only once if needed (instant check vs full node_modules scan)
+    local hmr_file="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh-hmr/lib/index.js"
+    if [[ -f "$hmr_file" ]] && grep -q 'if (hmr === void 0) throw' "$hmr_file" 2>/dev/null; then
+        sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' "$hmr_file" 2>/dev/null || true
+    fi
+
+    local env_exports=""
+    env_exports="$(sync_dsh_config)"
     if [[ -n "$env_exports" ]]; then
         eval "$env_exports"
     fi
@@ -318,8 +311,11 @@ case "${1:-}" in
     status)
         cmd_status
         ;;
+    sync)
+        sync_dsh_config >/dev/null
+        ;;
     *)
-        echo "Usage: harness {start|stop|restart|status}"
+        echo "Usage: harness {start|stop|restart|status|sync}"
         exit 1
         ;;
 esac
