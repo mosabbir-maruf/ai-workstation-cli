@@ -424,27 +424,27 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 3. Workstation Container Lifecycle
         elif clean_path == "/api/workstation/start":
-            ok, out = run_cmd(["ai", "start"], timeout=60.0)
+            ok, out = run_cmd(["ai", "start"], timeout=300.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/stop":
-            ok, out = run_cmd(["ai", "stop"], timeout=30.0)
+            ok, out = run_cmd(["ai", "stop"], timeout=60.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/restart":
-            ok, out = run_cmd(["ai", "restart"], timeout=60.0)
+            ok, out = run_cmd(["ai", "restart"], timeout=300.0)
             resp_data = {"ok": ok, "output": out}
 
         # 4. App Lifecycle inside container
         elif clean_path == "/api/app/run":
-            ok, out = run_cmd(["ai", "run"], timeout=90.0)
+            ok, out = run_cmd(["ai", "run"], timeout=180.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/stop":
-            ok, out = run_cmd(["ai", "app", "stop"], timeout=15.0)
+            ok, out = run_cmd(["ai", "app", "stop"], timeout=30.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/restart":
-            ok, out = run_cmd(["ai", "app", "restart"], timeout=90.0)
+            ok, out = run_cmd(["ai", "app", "restart"], timeout=180.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/status":
-            ok, out = run_cmd(["ai", "app", "status"], timeout=5.0)
+            ok, out = run_cmd(["ai", "app", "status"], timeout=10.0)
             resp_data = {"ok": ok, "output": out}
 
         # 5. Projects

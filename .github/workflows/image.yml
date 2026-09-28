@@ -114,7 +114,7 @@ jobs:
             console.log(`Found ${taggedVersions.length} tagged image versions.`);
 
             const versionsToKeep = taggedVersions.slice(0, keepImages);
-            const keptIds = new Set(versionsToKeep.map((version) => version.id));
+            const versionsToDelete = taggedVersions.slice(keepImages);
 
             console.log("Keeping:");
 
@@ -126,28 +126,7 @@ jobs:
               );
             }
 
-            const oldestKeptDate =
-              versionsToKeep.length > 0
-                ? new Date(versionsToKeep[versionsToKeep.length - 1].created_at)
-                : new Date();
-
-            const versionsToDelete = activeVersions.filter((version) => {
-              if (keptIds.has(version.id)) {
-                return false;
-              }
-
-              const tags = version.metadata?.container?.tags ?? [];
-
-              // Delete old tagged images beyond retention limit
-              if (tags.length > 0) {
-                return true;
-              }
-
-              // Also delete untagged builds and dangling intermediate layers
-              return true;
-            });
-
-            console.log(`Deleting ${versionsToDelete.length} old versions...`);
+            console.log(`Deleting ${versionsToDelete.length} old tagged versions...`);
 
             for (const version of versionsToDelete) {
               const tags = version.metadata?.container?.tags ?? [];
