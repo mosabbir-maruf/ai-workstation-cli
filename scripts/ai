@@ -308,8 +308,8 @@ cmd_push() {
 HARNESS_RUNTIME_DIR="$RUNTIME_DIR/harness"
 
 harness_exec() {
-    docker exec ai-workstation-cli \
-        /usr/local/bin/harness.sh "$@"
+    docker exec -i ai-workstation-cli \
+        bash -s -- "$@" < "$ROOT/docker/harness.sh"
 }
 
 cmd_harness_start() {
