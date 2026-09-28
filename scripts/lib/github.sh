@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RESOLVED_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$RESOLVED_SOURCE" ]; do
+    TARGET="$(readlink "$RESOLVED_SOURCE")"
+    if [[ "$TARGET" == /* ]]; then
+        RESOLVED_SOURCE="$TARGET"
+    else
+        RESOLVED_SOURCE="$(dirname "$RESOLVED_SOURCE")/$TARGET"
+    fi
+done
+SCRIPT_ROOT="$(cd "$(dirname "$RESOLVED_SOURCE")/../.." && pwd)"
 ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
 if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
     ROOT="$SCRIPT_ROOT"
@@ -37,10 +46,30 @@ set_env() {
 
 github_ensure_service() {
     local current_user
-    current_user="$(id -un)"
+    current_user="${SUDO_USER:-$(id -un)}"
+    if [[ "$current_user" == "root" && -n "${SUDO_USER:-}" ]]; then
+        current_user="$SUDO_USER"
+    fi
+    if [[ "$current_user" == "root" ]]; then
+        local root_owner
+        root_owner="$(stat -c '%U' "$ROOT" 2>/dev/null || stat -f '%Su' "$ROOT" 2>/dev/null || echo "")"
+        if [[ -n "$root_owner" && "$root_owner" != "root" ]]; then
+            current_user="$root_owner"
+        fi
+    fi
+
+    run_elevated() {
+        if [[ "$(id -u)" -eq 0 ]]; then
+            "$@"
+        elif sudo -n true 2>/dev/null; then
+            sudo -n "$@"
+        else
+            sudo "$@"
+        fi
+    }
 
     if ! getent group ai-broker >/dev/null 2>&1; then
-        sudo -n groupadd --system ai-broker 2>/dev/null || true
+        run_elevated groupadd --system ai-broker 2>/dev/null || true
     fi
 
     if getent group ai-broker >/dev/null 2>&1; then
@@ -49,21 +78,36 @@ github_ensure_service() {
         set_env GITHUB_BROKER_GID "$broker_gid"
     fi
     set_env GITHUB_BROKER_SOCKET "$BROKER_SOCKET"
+    set_env AI_WORKSTATION_ROOT "$ROOT"
 
-    if ! id -nG "$current_user" | grep -qw "ai-broker"; then
-        sudo -n usermod -aG ai-broker "$current_user" 2>/dev/null || true
+    if ! id -nG "$current_user" 2>/dev/null | grep -qw "ai-broker"; then
+        run_elevated usermod -aG ai-broker "$current_user" 2>/dev/null || true
     fi
 
     mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
     chmod 700 "$SECRETS_DIR"
+    run_elevated chown -R "$current_user" "$SECRETS_DIR" 2>/dev/null || true
+
     if getent group ai-broker >/dev/null 2>&1; then
-        sudo -n chown -R "$current_user":ai-broker "$BROKER_DIR" 2>/dev/null || chown -R "$current_user" "$BROKER_DIR" 2>/dev/null || true
-        sudo -n chmod 770 "$BROKER_DIR" 2>/dev/null || chmod 770 "$BROKER_DIR" 2>/dev/null || true
+        run_elevated chown -R "$current_user":ai-broker "$BROKER_DIR" 2>/dev/null || chown -R "$current_user" "$BROKER_DIR" 2>/dev/null || true
+        run_elevated chmod 770 "$BROKER_DIR" 2>/dev/null || chmod 770 "$BROKER_DIR" 2>/dev/null || true
     else
         chmod 770 "$BROKER_DIR" 2>/dev/null || true
     fi
 
-    if sudo -n tee "$SERVICE_FILE" >/dev/null 2>&1 <<SERVICE
+    local py_bin="$ROOT/.venv/bin/python"
+    [[ -x "$py_bin" ]] || py_bin="$(command -v python3)"
+
+    local write_service_cmd="tee"
+    if [[ "$(id -u)" -ne 0 ]]; then
+        if sudo -n true 2>/dev/null; then
+            write_service_cmd="sudo -n tee"
+        else
+            write_service_cmd="sudo tee"
+        fi
+    fi
+
+    if $write_service_cmd "$SERVICE_FILE" >/dev/null 2>&1 <<SERVICE
 [Unit]
 Description=AI Workstation GitHub App Credential Broker
 After=network-online.target
@@ -78,7 +122,7 @@ WorkingDirectory=$ROOT
 
 Environment=AI_WORKSTATION_ROOT=$ROOT
 
-ExecStart=$ROOT/.venv/bin/python $BROKER_SCRIPT
+ExecStart=$py_bin $BROKER_SCRIPT
 
 Restart=always
 RestartSec=3
@@ -94,8 +138,8 @@ ReadWritePaths=$RUNTIME_DIR
 WantedBy=multi-user.target
 SERVICE
     then
-        sudo -n systemctl daemon-reload 2>/dev/null || true
-        sudo -n systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+        run_elevated systemctl daemon-reload 2>/dev/null || true
+        run_elevated systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
     fi
 
     mkdir -p "$ROOT/docker"
@@ -149,15 +193,25 @@ HELPER
 }
 
 github_start_broker() {
-    # 1. Try systemctl via non-interactive sudo if permitted
+    # 1. If running as root, call systemctl directly
+    if [[ "$(id -u)" -eq 0 ]]; then
+        systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+        if systemctl restart "$SERVICE_NAME" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # 2. Try systemctl via non-interactive sudo if permitted
     if sudo -n systemctl reset-failed "$SERVICE_NAME" 2>/dev/null && sudo -n systemctl restart "$SERVICE_NAME" 2>/dev/null; then
         return 0
     fi
-    # 2. Try direct systemctl if user has permissions
+
+    # 3. Try direct systemctl if user has permissions
     if systemctl reset-failed "$SERVICE_NAME" 2>/dev/null && systemctl restart "$SERVICE_NAME" 2>/dev/null; then
         return 0
     fi
-    # 3. Direct user process fallback (no sudo needed at all)
+
+    # 4. Direct user process fallback (no sudo needed at all)
     local pid_file="$BROKER_DIR/broker.pid"
     if [[ -f "$pid_file" ]]; then
         local old_pid
@@ -169,7 +223,9 @@ github_start_broker() {
         rm -f "$pid_file"
     fi
     mkdir -p "$BROKER_DIR"
-    "$ROOT/.venv/bin/python" "$BROKER_SCRIPT" >> "$BROKER_DIR/broker.log" 2>&1 &
+    local py_bin="$ROOT/.venv/bin/python"
+    [[ -x "$py_bin" ]] || py_bin="$(command -v python3)"
+    "$py_bin" "$BROKER_SCRIPT" >> "$BROKER_DIR/broker.log" 2>&1 &
     echo $! > "$pid_file"
 }
 
@@ -334,7 +390,10 @@ github_test() {
 
     echo "Testing GitHub App credentials..."
 
-    "$ROOT/.venv/bin/python" - <<PY
+    local py_bin="$ROOT/.venv/bin/python"
+    [[ -x "$py_bin" ]] || py_bin="$(command -v python3)"
+
+    "$py_bin" - <<PY
 import sys
 sys.path.insert(0, "$ROOT/broker")
 

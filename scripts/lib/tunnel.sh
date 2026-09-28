@@ -7,12 +7,25 @@
 # `ai preview` can print the public URLs and flag a stale app port.
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
+RESOLVED_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$RESOLVED_SOURCE" ]; do
+    TARGET="$(readlink "$RESOLVED_SOURCE")"
+    if [[ "$TARGET" == /* ]]; then
+        RESOLVED_SOURCE="$TARGET"
+    else
+        RESOLVED_SOURCE="$(dirname "$RESOLVED_SOURCE")/$TARGET"
+    fi
+done
+LIB_DIR="$(cd "$(dirname "$RESOLVED_SOURCE")" && pwd)"
+SCRIPT_ROOT="$(cd "$LIB_DIR/../.." && pwd)"
+ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
+    ROOT="$SCRIPT_ROOT"
+fi
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
 TOKEN_FILE="$SECRETS_DIR/cloudflared-token"
 SERVICE_NAME="cloudflared"
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORTS_SCRIPT="$LIB_DIR/ports.sh"
 
 die() {

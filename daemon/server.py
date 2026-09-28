@@ -23,8 +23,16 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Paths
-ROOT = Path(os.environ.get("AI_WORKSTATION_ROOT", str(Path(__file__).resolve().parent.parent)))
+def _resolve_root() -> Path:
+    env_root = os.environ.get("AI_WORKSTATION_ROOT")
+    if env_root:
+        p = Path(env_root).resolve()
+        if p.is_dir() and (p / "broker/github_broker.py").is_file():
+            return p
+    return Path(__file__).resolve().parent.parent
+
+
+ROOT = _resolve_root()
 ENV_FILE = ROOT / ".env"
 RUNTIME_DIR = ROOT / "runtime"
 PROJECTS_DIR = Path.home() / "projects"

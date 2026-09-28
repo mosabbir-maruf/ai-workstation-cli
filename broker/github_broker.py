@@ -10,13 +10,16 @@ from urllib.request import Request, urlopen
 import jwt
 
 
-ROOT = Path(
-    os.environ.get(
-        "AI_WORKSTATION_ROOT",
-        str(Path(__file__).resolve().parent.parent),
-    )
-)
+def _resolve_root() -> Path:
+    env_root = os.environ.get("AI_WORKSTATION_ROOT")
+    if env_root:
+        p = Path(env_root).resolve()
+        if p.is_dir() and (p / "broker/github_broker.py").is_file():
+            return p
+    return Path(__file__).resolve().parent.parent
 
+
+ROOT = _resolve_root()
 ENV_FILE = ROOT / ".env"
 PRIVATE_KEY = ROOT / "secrets/github-app.pem"
 SOCKET_PATH = ROOT / "runtime/github-broker/github.sock"

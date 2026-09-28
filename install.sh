@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESOLVED_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$RESOLVED_SOURCE" ]; do
+    TARGET="$(readlink "$RESOLVED_SOURCE")"
+    if [[ "$TARGET" == /* ]]; then
+        RESOLVED_SOURCE="$TARGET"
+    else
+        RESOLVED_SOURCE="$(dirname "$RESOLVED_SOURCE")/$TARGET"
+    fi
+done
+ROOT="$(cd "$(dirname "$RESOLVED_SOURCE")" && pwd)"
 ENV_FILE="$ROOT/.env"
 
 die() {
@@ -169,6 +178,17 @@ echo "✓ ai CLI installed"
 DAEMON_SERVICE_FILE="/etc/systemd/system/ai-workstation-daemon.service"
 echo "Configuring AI Workstation daemon service..."
 
+CURRENT_USER="${SUDO_USER:-$(id -un)}"
+if [[ "$CURRENT_USER" == "root" && -n "${SUDO_USER:-}" ]]; then
+    CURRENT_USER="$SUDO_USER"
+fi
+if [[ "$CURRENT_USER" == "root" ]]; then
+    ROOT_OWNER="$(stat -c '%U' "$ROOT" 2>/dev/null || stat -f '%Su' "$ROOT" 2>/dev/null || echo "")"
+    if [[ -n "$ROOT_OWNER" && "$ROOT_OWNER" != "root" ]]; then
+        CURRENT_USER="$ROOT_OWNER"
+    fi
+fi
+
 sudo tee "$DAEMON_SERVICE_FILE" >/dev/null <<SERVICE
 [Unit]
 Description=AI Workstation Host Control Daemon
@@ -176,7 +196,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=$(id -un)
+User=$CURRENT_USER
 WorkingDirectory=$ROOT
 Environment=AI_WORKSTATION_ROOT=$ROOT
 ExecStart=/usr/bin/python3 $ROOT/daemon/server.py
@@ -195,7 +215,7 @@ echo "✓ Host daemon service configured"
 
 # Configure GitHub Broker Systemd Service & Permissions
 echo "Configuring GitHub Broker service..."
-bash "$ROOT/scripts/lib/github.sh" ensure-service 2>/dev/null || true
+bash "$ROOT/scripts/lib/github.sh" ensure-service || true
 echo "✓ GitHub broker service configured"
 
 # --------------------------------------------------
