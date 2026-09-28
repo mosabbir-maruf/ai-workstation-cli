@@ -69,10 +69,11 @@ def get_configured_api_key() -> str:
     return file_vals.get("WORKSTATION_API_KEY", "").strip()
 
 
-def run_cmd(cmd: list, timeout: float = 30.0) -> tuple:
+def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
     try:
         res = subprocess.run(
             cmd,
+            input=input_data,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -688,6 +689,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         elif clean_path == "/api/terminal/exec":
             command = parsed_json.get("command", "").strip()
             target = parsed_json.get("target", "host")  # "host" or "workstation"
+            sudo_password = parsed_json.get("sudoPassword", "")
             if not command:
                 status_code = 400
                 resp_data = {"ok": False, "output": "No command provided"}
@@ -704,9 +706,28 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         resp_data = {"ok": ok, "output": out}
                 else:
                     # Execute on host
-                    cmd = ["bash", "-lc", command]
-                    ok, out = run_cmd(cmd, timeout=90.0)
-                    resp_data = {"ok": ok, "output": out}
+                    if sudo_password:
+                        # Clean sudo prefix if already present so sudo -S controls execution
+                        cmd_str = command[5:].strip() if command.startswith("sudo ") else command
+                        cmd = ["sudo", "-S", "-p", "", "bash", "-lc", cmd_str]
+                        ok, out = run_cmd(cmd, timeout=90.0, input_data=f"{sudo_password}\n")
+                        cleaned_out = out.strip()
+                        requires_sudo = False
+                        if not ok and ("incorrect password" in cleaned_out.lower() or "sorry, try again" in cleaned_out.lower()):
+                            requires_sudo = True
+                        resp_data = {"ok": ok, "output": cleaned_out, "requiresSudo": requires_sudo}
+                    else:
+                        cmd = ["bash", "-lc", command]
+                        ok, out = run_cmd(cmd, timeout=90.0)
+                        requires_sudo = False
+                        if not ok:
+                            low = out.lower()
+                            if ("a terminal is required to authenticate" in low or
+                                "password is required" in low or
+                                "no tty present" in low or
+                                "[sudo] password for" in low):
+                                requires_sudo = True
+                        resp_data = {"ok": ok, "output": out, "requiresSudo": requires_sudo}
         elif clean_path == "/api/cache":
             ok, out = run_cmd(["ai", "cache"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}

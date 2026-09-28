@@ -36,25 +36,30 @@ github_ensure_service() {
     current_user="$(id -un)"
 
     if ! getent group ai-broker >/dev/null 2>&1; then
-        sudo groupadd --system ai-broker
+        sudo -n groupadd --system ai-broker 2>/dev/null || true
     fi
 
-    local broker_gid
-    broker_gid="$(getent group ai-broker | cut -d: -f3)"
-
-    set_env GITHUB_BROKER_GID "$broker_gid"
+    if getent group ai-broker >/dev/null 2>&1; then
+        local broker_gid
+        broker_gid="$(getent group ai-broker | cut -d: -f3)"
+        set_env GITHUB_BROKER_GID "$broker_gid"
+    fi
     set_env GITHUB_BROKER_SOCKET "$BROKER_SOCKET"
 
     if ! id -nG "$current_user" | grep -qw "ai-broker"; then
-        sudo usermod -aG ai-broker "$current_user"
+        sudo -n usermod -aG ai-broker "$current_user" 2>/dev/null || true
     fi
 
     mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
     chmod 700 "$SECRETS_DIR"
-    sudo chown -R "$current_user":ai-broker "$BROKER_DIR"
-    sudo chmod 770 "$BROKER_DIR"
+    if getent group ai-broker >/dev/null 2>&1; then
+        sudo -n chown -R "$current_user":ai-broker "$BROKER_DIR" 2>/dev/null || chown -R "$current_user" "$BROKER_DIR" 2>/dev/null || true
+        sudo -n chmod 770 "$BROKER_DIR" 2>/dev/null || chmod 770 "$BROKER_DIR" 2>/dev/null || true
+    else
+        chmod 770 "$BROKER_DIR" 2>/dev/null || true
+    fi
 
-    sudo tee "$SERVICE_FILE" >/dev/null <<SERVICE
+    if sudo -n tee "$SERVICE_FILE" >/dev/null 2>&1 <<SERVICE
 [Unit]
 Description=AI Workstation GitHub App Credential Broker
 After=network-online.target
@@ -84,6 +89,10 @@ ReadWritePaths=$RUNTIME_DIR
 [Install]
 WantedBy=multi-user.target
 SERVICE
+    then
+        sudo -n systemctl daemon-reload 2>/dev/null || true
+        sudo -n systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+    fi
 
     mkdir -p "$ROOT/docker"
 
@@ -133,9 +142,31 @@ esac
 HELPER
 
     chmod +x "$HELPER"
+}
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+github_start_broker() {
+    # 1. Try systemctl via non-interactive sudo if permitted
+    if sudo -n systemctl reset-failed "$SERVICE_NAME" 2>/dev/null && sudo -n systemctl restart "$SERVICE_NAME" 2>/dev/null; then
+        return 0
+    fi
+    # 2. Try direct systemctl if user has permissions
+    if systemctl reset-failed "$SERVICE_NAME" 2>/dev/null && systemctl restart "$SERVICE_NAME" 2>/dev/null; then
+        return 0
+    fi
+    # 3. Direct user process fallback (no sudo needed at all)
+    local pid_file="$BROKER_DIR/broker.pid"
+    if [[ -f "$pid_file" ]]; then
+        local old_pid
+        old_pid="$(cat "$pid_file" 2>/dev/null || true)"
+        if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+            kill -TERM "$old_pid" 2>/dev/null || true
+            sleep 0.3
+        fi
+        rm -f "$pid_file"
+    fi
+    mkdir -p "$BROKER_DIR"
+    "$ROOT/.venv/bin/python" "$BROKER_SCRIPT" >> "$BROKER_DIR/broker.log" 2>&1 &
+    echo $! > "$pid_file"
 }
 
 github_setup() {
@@ -213,8 +244,7 @@ github_setup() {
     github_ensure_service
 
     echo "Starting GitHub broker..."
-    sudo systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
-    sudo systemctl restart "$SERVICE_NAME"
+    github_start_broker
 
     # Poll up to 5s for socket readiness
     local ready=0
@@ -227,10 +257,7 @@ github_setup() {
     done
 
     if [[ $ready -eq 0 ]]; then
-        if ! sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-            die "GitHub broker failed to start: $(sudo systemctl status "$SERVICE_NAME" 2>&1 | grep -E "Active:|Failed|Error" | head -n 2 | sed 's/^[ \t]*//')"
-        fi
-        die "Broker socket was not created at $BROKER_SOCKET."
+        die "Broker socket was not created at $BROKER_SOCKET. Check: $BROKER_DIR/broker.log or journalctl -u $SERVICE_NAME -n 30 --no-pager"
     fi
 
     echo "✓ Broker running"
@@ -260,9 +287,13 @@ github_status() {
         echo "Broker socket:   ready" ||
         echo "Broker socket:   not ready"
 
-    systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null &&
-        echo "Broker service:  running" ||
-        echo "Broker service:  stopped"
+    local svc_active="stopped"
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        svc_active="running (systemd)"
+    elif [[ -f "$BROKER_DIR/broker.pid" ]] && kill -0 "$(cat "$BROKER_DIR/broker.pid" 2>/dev/null)" 2>/dev/null; then
+        svc_active="running (background)"
+    fi
+    echo "Broker service:  $svc_active"
 
     echo
 }
@@ -284,8 +315,7 @@ github_test() {
     if [[ ! -S "$BROKER_SOCKET" ]]; then
         echo "Broker socket not active, attempting service startup..."
         github_ensure_service >/dev/null 2>&1 || true
-        sudo systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
-        sudo systemctl restart "$SERVICE_NAME" 2>/dev/null || true
+        github_start_broker
         for _ in {1..15}; do
             if [[ -S "$BROKER_SOCKET" ]]; then
                 break
@@ -295,13 +325,7 @@ github_test() {
     fi
 
     if [[ ! -S "$BROKER_SOCKET" ]]; then
-        local svc_status
-        svc_status="$(sudo systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo "unknown")"
-        if [[ "$svc_status" != "active" ]]; then
-            die "Broker socket is not ready ($SERVICE_NAME is $svc_status). Check: sudo journalctl -u $SERVICE_NAME -n 30 --no-pager"
-        else
-            die "Broker socket is not ready at $BROKER_SOCKET even though $SERVICE_NAME is active. Check directory permissions."
-        fi
+        die "Broker socket is not ready at $BROKER_SOCKET. Check: $BROKER_DIR/broker.log or journalctl -u $SERVICE_NAME -n 30 --no-pager"
     fi
 
     echo "Testing GitHub App credentials..."
