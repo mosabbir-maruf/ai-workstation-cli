@@ -357,19 +357,34 @@ def get_fast_overview() -> dict:
 
     app_ok = False
     app_pid = "—"
-    if container_ok and APP_PID_FILE.is_file():
-        try:
-            pid_raw = APP_PID_FILE.read_text().strip()
-            if pid_raw.isdigit():
-                app_pid = pid_raw
-                app_port = int(env.get("CLOUDFLARED_APP_PORT", "5173"))
-                if is_port_open(app_port):
-                    app_ok = True
-                else:
-                    ok, _ = _run_cmd_sync(["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {app_pid} 2>/dev/null"], timeout=1.5)
-                    app_ok = ok
-        except Exception:
-            pass
+    configured_port = int(env.get("CLOUDFLARED_APP_PORT") or "5173")
+    active_app_port = configured_port
+
+    if container_ok:
+        candidate_ports = []
+        for p in (configured_port, 5173, 3000, 3001, 8080):
+            if p not in candidate_ports:
+                candidate_ports.append(p)
+
+        for p in candidate_ports:
+            if is_port_open(p):
+                app_ok = True
+                active_app_port = p
+                break
+
+        if APP_PID_FILE.is_file():
+            try:
+                pid_raw = APP_PID_FILE.read_text().strip()
+                if pid_raw.isdigit():
+                    app_pid = pid_raw
+                    if not app_ok:
+                        ok, _ = _run_cmd_sync(
+                            ["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {app_pid} 2>/dev/null"],
+                            timeout=1.5,
+                        )
+                        app_ok = ok
+            except Exception:
+                pass
 
     harness_active = (
         container_ok
@@ -428,6 +443,7 @@ def get_fast_overview() -> dict:
         "app": {
             "running": app_ok,
             "pid": app_pid if app_ok else "—",
+            "port": active_app_port,
         },
         "harness": {
             "active": harness_active,
@@ -626,6 +642,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             overview = get_fast_overview()
             app_ok = overview["app"]["running"]
             app_pid = overview["app"]["pid"]
+            app_port = overview["app"].get("port", 5173)
             env = read_env()
             active_proj = env.get("ACTIVE_PROJECT", "none")
 
@@ -633,10 +650,18 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 "=== Project ===",
                 f"Project: {active_proj or 'none'}",
                 f"Status: {'running' if app_ok else 'stopped'}",
+                f"Port: :{app_port}",
             ]
             if app_ok and app_pid and app_pid != "—":
                 summary.append(f"PID: {app_pid}")
-            resp_data = {"ok": True, "output": "\n".join(summary)}
+            resp_data = {
+                "ok": True,
+                "running": app_ok,
+                "port": app_port,
+                "project": active_proj or "none",
+                "pid": app_pid if app_ok else "—",
+                "output": "\n".join(summary),
+            }
 
         # 5. Projects
         elif clean_path == "/api/projects":
@@ -1242,6 +1267,14 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
     if endpoint == "/api/logs/app":
         APP_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
         APP_LOG_FILE.touch(exist_ok=True)
+        overview = get_fast_overview()
+        if not overview["app"]["running"]:
+            try:
+                APP_LOG_FILE.write_text("", encoding="utf-8")
+            except Exception:
+                pass
+            writer.write(b"event: message\ndata: Project is not running.\n\n")
+            await writer.drain()
         target_cmd = ["tail", "-n", "80", "-F", str(APP_LOG_FILE)]
     elif endpoint == "/api/logs/workstation":
         target_cmd = ["docker", "logs", "--tail", "80", "-f", "ai-workstation-cli"]

@@ -1,35 +1,36 @@
 #!/usr/bin/env bash
 set -u
 
-PID_FILE="/run/ai-workstation-cli/app/pid"
-PGID_FILE="/run/ai-workstation-cli/app/pgid"
-LOG_FILE="/run/ai-workstation-cli/app/app.log"
+APP_DIR="/run/ai-workstation-cli/app"
+PID_FILE="$APP_DIR/pid"
+PGID_FILE="$APP_DIR/pgid"
+LOG_FILE="$APP_DIR/app.log"
 
-cleanup() {
-    rm -f "$PID_FILE" "$PGID_FILE"
-}
+# Ensure app-runner itself is a session/process-group leader (PGID == $$)
+# so setsid never forks a background orphan and exits early.
+current_pgid="$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ' || true)"
+if [[ -n "$current_pgid" && "$current_pgid" != "$$" && "${_AIWS_SETSID:-0}" != "1" ]]; then
+    export _AIWS_SETSID=1
+    exec setsid "$0" "$@"
+fi
 
+mkdir -p "$APP_DIR" 2>/dev/null || true
 rm -f "$PID_FILE" "$PGID_FILE"
 : > "$LOG_FILE"
 
 cd /workspace || exit 1
 
-setsid bash -lc 'exec "$@"' -- "$@" >>"$LOG_FILE" 2>&1 &
-pid=$!
+bash -lc 'exec "$@"' -- "$@" >>"$LOG_FILE" 2>&1 &
+child_pid=$!
+pgid="$$"
 
-pgid="$(ps -o pgid= -p "$pid" | tr -d ' ')"
-
-if [[ ! "$pid" =~ ^[0-9]+$ ]] || [[ ! "$pgid" =~ ^[0-9]+$ ]]; then
-    kill "$pid" 2>/dev/null || true
-    exit 1
-fi
-
-echo "$pid" > "$PID_FILE"
+echo "$child_pid" > "$PID_FILE"
 echo "$pgid" > "$PGID_FILE"
 
+cleanup() {
+    rm -f "$PID_FILE" "$PGID_FILE"
+}
 trap cleanup EXIT
 
-wait "$pid"
-status=$?
-
-exit "$status"
+wait "$child_pid"
+exit $?
