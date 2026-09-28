@@ -657,17 +657,6 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             ok, out = run_cmd(["ai", "github", "status"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/test":
-            # If socket does not exist, ensure service is configured and started before testing
-            if not GITHUB_BROKER_SOCKET.is_socket():
-                github_script = ROOT / "scripts" / "lib" / "github.sh"
-                if github_script.is_file():
-                    run_cmd(["bash", str(github_script), "ensure-service"], timeout=10.0)
-                run_cmd(["sudo", "systemctl", "reset-failed", "ai-github-broker"], timeout=5.0)
-                run_cmd(["sudo", "systemctl", "restart", "ai-github-broker"], timeout=10.0)
-                for _ in range(15):
-                    if GITHUB_BROKER_SOCKET.is_socket():
-                        break
-                    time.sleep(0.2)
             ok, out = run_cmd(["ai", "github", "test"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/setup":
@@ -679,6 +668,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "appId, installationId, and pemText are required"}
             else:
+                # Write PEM file directly to avoid passing multi-line RSA keys through shell argument strings
                 secrets_dir = ROOT / "secrets"
                 secrets_dir.mkdir(parents=True, exist_ok=True)
                 secrets_dir.chmod(0o700)
@@ -686,30 +676,13 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 GITHUB_PEM_FILE.write_text(clean_pem)
                 GITHUB_PEM_FILE.chmod(0o600)
 
-                env_vals = read_env()
-                env_vals["GITHUB_APP_ID"] = app_id
-                env_vals["GITHUB_INSTALLATION_ID"] = inst_id
-                lines = [f"{k}={v}" for k, v in env_vals.items()]
-                ENV_FILE.write_text("\n".join(lines) + "\n")
-                ENV_FILE.chmod(0o600)
-
-                # Configure GitHub Broker systemd service & group permissions
-                github_script = ROOT / "scripts" / "lib" / "github.sh"
-                if github_script.is_file():
-                    run_cmd(["bash", str(github_script), "ensure-service"], timeout=10.0)
-
-                # Reset any failed state and restart broker service
-                run_cmd(["sudo", "systemctl", "reset-failed", "ai-github-broker"], timeout=5.0)
-                run_cmd(["sudo", "systemctl", "restart", "ai-github-broker"], timeout=10.0)
-
-                # Poll up to 3 seconds for broker socket readiness
-                for _ in range(15):
-                    if GITHUB_BROKER_SOCKET.is_socket():
-                        break
-                    time.sleep(0.2)
-
-                ok, out = run_cmd(["ai", "github", "test"], timeout=15.0)
-                resp_data = {"ok": ok, "output": out}
+                # Delegate setup to the canonical CLI implementation
+                ok, out = run_cmd(["ai", "github", "setup", app_id, inst_id, str(GITHUB_PEM_FILE)], timeout=15.0)
+                if ok:
+                    ok_test, test_out = run_cmd(["ai", "github", "test"], timeout=15.0)
+                    resp_data = {"ok": ok_test, "output": f"{out}\n\n{test_out}" if test_out else out}
+                else:
+                    resp_data = {"ok": False, "output": out}
 
         # 12. Maintenance (Cache & Doctor)
         elif clean_path == "/api/terminal/exec":

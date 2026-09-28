@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${AI_WORKSTATION_ROOT:-$HOME/ai-workstation-cli}"
+ROOT="${AI_WORKSTATION_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 ENV_FILE="$ROOT/.env"
 SECRETS_DIR="$ROOT/secrets"
 RUNTIME_DIR="$ROOT/runtime"
@@ -149,8 +149,8 @@ github_setup() {
     [[ -f "$ROOT/docker/compose.yml" ]] ||
         die "Docker Compose file not found."
 
-    mkdir -p "$SECRETS_DIR" "$BROKER_DIR"
-    chmod 700 "$SECRETS_DIR" "$BROKER_DIR"
+    mkdir -p "$SECRETS_DIR"
+    chmod 700 "$SECRETS_DIR"
 
     if [[ -z "$app_id" || -z "$installation_id" || -z "$pem_input" ]]; then
         echo

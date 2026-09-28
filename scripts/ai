@@ -1363,11 +1363,11 @@ cmd_github() {
         die "GitHub module not found: $GITHUB_LIB"
 
     case "$action" in
-        setup|status|test)
-            bash "$GITHUB_LIB" "$action"
+        setup|status|test|ensure-service)
+            bash "$GITHUB_LIB" "$@"
             ;;
         *)
-            die "Usage: ai github {setup|status|test}"
+            die "Usage: ai github {setup [app_id] [inst_id] [pem]|ensure-service|status|test}"
             ;;
     esac
 }
