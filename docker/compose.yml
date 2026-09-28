@@ -1,9 +1,6 @@
 services:
   workstation:
     image: ${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
     container_name: ai-workstation-cli
     restart: unless-stopped
 

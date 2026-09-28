@@ -364,20 +364,7 @@ cmd_start() {
         sudo chown -R 1001:1001 "$HARNESS_RUNTIME_DIR"
     fi
 
-    local target_image="${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}"
-    if ! docker image inspect "$target_image" >/dev/null 2>&1; then
-        echo "Image $target_image not found locally. Attempting pull or local build..."
-        if ! docker pull "$target_image" 2>/dev/null; then
-            echo "Remote image pull failed. Building image locally from docker/Dockerfile..."
-            docker build -t "$target_image" -f "$ROOT/docker/Dockerfile" "$ROOT"
-        fi
-    fi
-
-    if ! compose up -d; then
-        echo "Compose up failed. Rebuilding image locally from docker/Dockerfile..."
-        docker build -t "$target_image" -f "$ROOT/docker/Dockerfile" "$ROOT"
-        compose up -d --force-recreate
-    fi
+    compose up -d
 
     # Wait up to 30 seconds for the container to become running
     local attempts=0
