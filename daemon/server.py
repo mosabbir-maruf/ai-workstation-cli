@@ -22,6 +22,8 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 def _resolve_root() -> Path:
     env_root = os.environ.get("AI_WORKSTATION_ROOT")
@@ -806,6 +808,146 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             temp_archive.write_bytes(body)
             ok, out = run_cmd(["ai", "state", "import", str(temp_archive)], timeout=60.0)
             resp_data = {"ok": ok, "output": out}
+
+        elif clean_path == "/api/models/fetch":
+            provider = parsed_json.get("provider", "custom")
+            api_key = parsed_json.get("apiKey", "").strip()
+            base_url = parsed_json.get("baseUrl", "").strip()
+            models = []
+            error_msg = ""
+
+            try:
+                if provider == "custom" or base_url:
+                    normalized = base_url.rstrip("/")
+                    if not normalized.startswith("http://") and not normalized.startswith("https://"):
+                        normalized = f"http://{normalized}"
+
+                    urls_to_try = [
+                        f"{normalized}/models",
+                        f"{normalized}/v1/models" if not normalized.endswith("/v1") else f"{normalized}/models",
+                        f"{normalized.replace('/v1', '')}/api/tags",
+                    ]
+
+                    headers = {"Accept": "application/json"}
+                    if api_key:
+                        headers["Authorization"] = f"Bearer {api_key}"
+
+                    for test_url in urls_to_try:
+                        try:
+                            req = Request(test_url, headers=headers)
+                            with urlopen(req, timeout=5) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if isinstance(data, dict):
+                                    if "data" in data and isinstance(data["data"], list):
+                                        models = [m.get("id") or m.get("name") for m in data["data"] if isinstance(m, dict) and (m.get("id") or m.get("name"))]
+                                        if models:
+                                            break
+                                    elif "models" in data and isinstance(data["models"], list):
+                                        models = [m.get("name") or m.get("model") for m in data["models"] if isinstance(m, dict) and (m.get("name") or m.get("model"))]
+                                        if models:
+                                            break
+                                elif isinstance(data, list):
+                                    models = [m.get("id") or m.get("name") if isinstance(m, dict) else str(m) for m in data]
+                                    if models:
+                                        break
+                        except Exception:
+                            continue
+
+                elif provider == "deepseek":
+                    models = ["deepseek-chat", "deepseek-reasoner"]
+                    if api_key:
+                        try:
+                            req = Request("https://api.deepseek.com/models", headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"})
+                            with urlopen(req, timeout=5) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if "data" in data and isinstance(data["data"], list):
+                                    fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
+                                    if fetched:
+                                        models = fetched
+                        except Exception:
+                            pass
+
+                elif provider == "openai":
+                    models = ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4-turbo"]
+                    if api_key:
+                        try:
+                            req = Request("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"})
+                            with urlopen(req, timeout=6) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if "data" in data and isinstance(data["data"], list):
+                                    fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
+                                    chat_models = [m for m in fetched if re.search(r"^(gpt-4|gpt-3\.5|o1|o3|chatgpt)", m)]
+                                    if chat_models:
+                                        models = sorted(chat_models, key=lambda x: (not x.startswith("gpt-4o"), not x.startswith("o3"), not x.startswith("o1"), x))
+                        except Exception:
+                            pass
+
+                elif provider == "groq":
+                    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "mixtral-8x7b-32768"]
+                    if api_key:
+                        try:
+                            req = Request("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"})
+                            with urlopen(req, timeout=6) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if "data" in data and isinstance(data["data"], list):
+                                    fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
+                                    if fetched:
+                                        models = fetched
+                        except Exception:
+                            pass
+
+                elif provider == "openrouter":
+                    models = ["deepseek/deepseek-r1", "deepseek/deepseek-chat", "anthropic/claude-3.7-sonnet", "openai/gpt-4o", "meta-llama/llama-3.3-70b-instruct"]
+                    try:
+                        headers = {"Accept": "application/json"}
+                        if api_key:
+                            headers["Authorization"] = f"Bearer {api_key}"
+                        req = Request("https://openrouter.ai/api/v1/models", headers=headers)
+                        with urlopen(req, timeout=6) as res:
+                            data = json.loads(res.read().decode("utf-8", errors="replace"))
+                            if "data" in data and isinstance(data["data"], list):
+                                fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
+                                if fetched:
+                                    models = fetched[:50]
+                    except Exception:
+                        pass
+
+                elif provider == "gemini":
+                    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]
+                    if api_key:
+                        try:
+                            req = Request(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}", headers={"Accept": "application/json"})
+                            with urlopen(req, timeout=6) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if "models" in data and isinstance(data["models"], list):
+                                    fetched = [m["name"].replace("models/", "") for m in data["models"] if isinstance(m, dict) and "name" in m and "generateContent" in m.get("supportedGenerationMethods", [])]
+                                    if fetched:
+                                        models = fetched
+                        except Exception:
+                            pass
+
+                elif provider == "anthropic":
+                    models = ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"]
+                    if api_key:
+                        try:
+                            req = Request("https://api.anthropic.com/v1/models", headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Accept": "application/json"})
+                            with urlopen(req, timeout=6) as res:
+                                data = json.loads(res.read().decode("utf-8", errors="replace"))
+                                if "data" in data and isinstance(data["data"], list):
+                                    fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
+                                    if fetched:
+                                        models = fetched
+                        except Exception:
+                            pass
+            except Exception as e:
+                error_msg = str(e)
+
+            resp_data = {
+                "ok": len(models) > 0,
+                "provider": provider,
+                "models": models,
+                "error": error_msg if not models else None,
+            }
 
         else:
             status_code = 404
