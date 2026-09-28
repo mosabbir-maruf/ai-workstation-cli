@@ -74,10 +74,10 @@ start_dsh() {
         [[ -n "$entry" ]] && dsh_args+=(--trusted-host "$entry")
     done
 
-    # Ensure DSH headless web mode does not crash when HMR watcher is absent
-    local dsh_nm="/home/sandbox/.npm-global/node_modules/@deepseek-ai"
-    if [[ -d "$dsh_nm" ]]; then
-        find "$dsh_nm" -type f -name "*.js" -exec sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' {} + 2>/dev/null || true
+    # Patch dsh-hmr only once if needed (instant check vs full node_modules scan)
+    local hmr_file="/home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh-hmr/lib/index.js"
+    if [[ -f "$hmr_file" ]] && grep -q 'if (hmr === void 0) throw' "$hmr_file" 2>/dev/null; then
+        sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' "$hmr_file" 2>/dev/null || true
     fi
 
     node --expose-internals "$DSH_BIN" \
@@ -95,6 +95,7 @@ start_bridge() {
 
     node -e '
         const net = require("net");
+        const fs = require("fs");
 
         const server = net.createServer((socket) => {
             const target = net.connect(4090, "127.0.0.1", () => {
@@ -107,6 +108,16 @@ start_bridge() {
         });
 
         server.listen(4091, "0.0.0.0");
+
+        // Self-terminate bridge if DSH (4090) stops listening so host probes never see a zombie bridge
+        setInterval(() => {
+            const probe = net.connect(4090, "127.0.0.1", () => probe.destroy());
+            probe.on("error", () => {
+                try { fs.unlinkSync("/run/ai-workstation-cli/harness/dsh.pid"); } catch {}
+                try { fs.unlinkSync("/run/ai-workstation-cli/harness/bridge.pid"); } catch {}
+                process.exit(0);
+            });
+        }, 3000).unref();
     ' >>"$LOG_FILE" 2>&1 &
 
     echo "$!" > "$BRIDGE_PID_FILE"
@@ -143,14 +154,22 @@ cmd_start() {
 
     start_dsh
 
-    # Give DSH a moment to bind before starting the bridge.
-    for _ in {1..30}; do
+    # Wait up to 6s for DSH to bind port 4090 before starting the bridge.
+    local dsh_ready=0
+    for _ in {1..60}; do
         if (echo >/dev/tcp/127.0.0.1/4090) >/dev/null 2>&1; then
+            dsh_ready=1
             break
         fi
-
         sleep 0.1
     done
+
+    if [[ "$dsh_ready" -ne 1 ]]; then
+        echo "ERROR: DSH failed to bind port 4090." >&2
+        cat "$LOG_FILE" >&2 || true
+        rm -f "$DSH_PID_FILE"
+        return 1
+    fi
 
     start_bridge
 

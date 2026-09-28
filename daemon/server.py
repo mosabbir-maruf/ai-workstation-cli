@@ -370,16 +370,11 @@ def get_fast_overview() -> dict:
         except Exception:
             pass
 
-    harness_active = False
-    if container_ok:
-        if is_port_open(4091):
-            harness_active = True
-        elif HARNESS_LOG_FILE.is_file():
-            try:
-                if (now - HARNESS_LOG_FILE.stat().st_mtime) < 180:
-                    harness_active = True
-            except Exception:
-                pass
+    harness_active = (
+        container_ok
+        and (HARNESS_RUNTIME_DIR / "dsh.pid").is_file()
+        and is_port_open(4090)
+    )
 
     broker_online = GITHUB_BROKER_SOCKET.is_socket()
 
@@ -1230,7 +1225,9 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
 
     target_cmd = []
     if endpoint == "/api/logs/app":
-        target_cmd = ["docker", "exec", "ai-workstation-cli", "sh", "-c", "tail -n 80 -f /run/ai-workstation-cli/app/app.log 2>/dev/null || sleep 1"]
+        APP_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        APP_LOG_FILE.touch(exist_ok=True)
+        target_cmd = ["tail", "-n", "80", "-F", str(APP_LOG_FILE)]
     elif endpoint == "/api/logs/workstation":
         target_cmd = ["docker", "logs", "--tail", "80", "-f", "ai-workstation-cli"]
     elif endpoint == "/api/tunnel/logs":
