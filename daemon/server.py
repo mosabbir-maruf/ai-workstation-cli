@@ -9,16 +9,18 @@ Port: 8000 (default)
 """
 
 import asyncio
-import glob
+import errno
 import json
 import os
 import platform
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +57,45 @@ DAEMON_PORT = int(os.environ.get("WORKSTATION_DAEMON_PORT", "8000"))
 
 START_TIME = time.time()
 TIMELINE_BUFFER = []
+_OVERVIEW_LOCK = threading.Lock()
+_ACTIVE_SSE_PROCS = set()
+
+
+def _reap_zombies_and_leaked_streams():
+    """Reaps zombie child processes and terminates leaked log-tail subprocesses in pure Python (0 forks) to prevent Errno 11 (EAGAIN)."""
+    try:
+        while True:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid <= 0:
+                break
+    except Exception:
+        pass
+
+    for proc in list(_ACTIVE_SSE_PROCS):
+        try:
+            if proc.returncode is None:
+                proc.kill()
+        except Exception:
+            pass
+    _ACTIVE_SSE_PROCS.clear()
+
+    my_uid = os.getuid() if hasattr(os, "getuid") else None
+    if Path("/proc").is_dir():
+        try:
+            for entry in os.scandir("/proc"):
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    if my_uid is not None and entry.stat().st_uid != my_uid:
+                        continue
+                    with open(f"/proc/{entry.name}/cmdline", "rb") as f:
+                        cmdline = f.read().replace(b"\x00", b" ").decode("utf-8", errors="ignore")
+                    if "tail -n 80 -F" in cmdline or "docker logs --tail 80 -f" in cmdline:
+                        os.kill(int(entry.name), signal.SIGKILL)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 
 def read_env() -> dict:
@@ -81,30 +122,46 @@ def get_configured_api_key() -> str:
 
 
 def _run_cmd_sync(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
-    try:
-        actual_cmd = list(cmd)
-        if actual_cmd and actual_cmd[0] == "ai":
-            script_path = ROOT / "scripts" / "ai"
-            if script_path.is_file():
-                actual_cmd[0] = str(script_path)
-        res = subprocess.run(
-            actual_cmd,
-            input=input_data,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=timeout,
-            cwd=str(ROOT),
-        )
-        return res.returncode == 0, res.stdout.strip()
-    except subprocess.TimeoutExpired:
-        return False, f"Command timed out after {timeout}s: {' '.join(cmd)}"
-    except Exception as e:
-        return False, str(e)
+    actual_cmd = list(cmd)
+    if actual_cmd and actual_cmd[0] == "ai":
+        script_path = ROOT / "scripts" / "ai"
+        if script_path.is_file():
+            actual_cmd[0] = str(script_path)
 
+    last_err = ""
+    for attempt in range(4):
+        try:
+            run_kwargs = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "timeout": timeout,
+                "cwd": str(ROOT),
+            }
+            if input_data is not None:
+                run_kwargs["input"] = input_data
+            else:
+                run_kwargs["stdin"] = subprocess.DEVNULL
 
-def run_cmd(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
-    return _run_cmd_sync(cmd, timeout, input_data)
+            res = subprocess.run(actual_cmd, **run_kwargs)
+            out_str = res.stdout.strip()
+            if res.returncode != 0 and ("Errno 11" in out_str or "Resource temporarily unavailable" in out_str) and attempt < 3:
+                _reap_zombies_and_leaked_streams()
+                time.sleep(0.25 * (attempt + 1))
+                continue
+            return res.returncode == 0, out_str
+        except subprocess.TimeoutExpired:
+            return False, f"Command timed out after {timeout}s: {' '.join(cmd)}"
+        except OSError as e:
+            last_err = str(e)
+            if (e.errno == errno.EAGAIN or "Errno 11" in last_err or "Resource temporarily unavailable" in last_err) and attempt < 3:
+                _reap_zombies_and_leaked_streams()
+                time.sleep(0.25 * (attempt + 1))
+                continue
+            return False, last_err
+        except Exception as e:
+            return False, str(e)
+    return False, last_err
 
 
 async def run_cmd_async(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
@@ -315,22 +372,40 @@ def get_active_project_git_info(project_name: str, custom_path: str = "") -> dic
         return None
     proj_path = Path(custom_path) if custom_path and Path(custom_path).is_dir() else (PROJECTS_DIR / project_name)
     if not (proj_path / ".git").is_dir():
-        # Fallback search in /home/mosabbir/projects
         alt_path = Path("/home/mosabbir/projects") / project_name
         if (alt_path / ".git").is_dir():
             proj_path = alt_path
         else:
             return None
 
-    def git_read(args: list) -> str:
-        ok, out = run_cmd(["git", "-C", str(proj_path)] + args, timeout=3.0)
-        return out.strip() if ok else ""
+    # Read current branch directly from .git/HEAD without forking a git subprocess
+    branch = "main"
+    head_file = proj_path / ".git" / "HEAD"
+    if head_file.is_file():
+        try:
+            head_raw = head_file.read_text(encoding="utf-8", errors="replace").strip()
+            if head_raw.startswith("ref: refs/heads/"):
+                branch = head_raw[len("ref: refs/heads/"):].strip() or "main"
+            elif head_raw:
+                branch = head_raw[:8]
+        except Exception:
+            pass
 
-    branch = git_read(["branch", "--show-current"]) or "main"
-    last_msg = git_read(["log", "-1", "--format=%s"]) or "Initial commit"
-    last_time = git_read(["log", "-1", "--format=%cd", "--date=iso-strict"]) or ""
+    last_msg = "Initial commit"
+    last_time = ""
+    ok, log_out = _run_cmd_sync(
+        ["git", "-C", str(proj_path), "log", "-1", "--format=%s%n%cd", "--date=iso-strict"],
+        timeout=3.0,
+    )
+    if ok and log_out:
+        lines = log_out.splitlines()
+        if lines:
+            last_msg = lines[0].strip() or "Initial commit"
+        if len(lines) > 1:
+            last_time = lines[1].strip()
+
     dirty_count = 0
-    ok, status_out = run_cmd(["git", "-C", str(proj_path), "status", "--porcelain"], timeout=3.0)
+    ok, status_out = _run_cmd_sync(["git", "-C", str(proj_path), "status", "--porcelain"], timeout=3.0)
     if ok and status_out:
         dirty_count = len(status_out.splitlines())
 
@@ -349,6 +424,25 @@ def get_fast_overview() -> dict:
     if cached and (now - _CACHE["overview"]["ts"] < CACHE_TTL):
         return cached
 
+    with _OVERVIEW_LOCK:
+        now = time.time()
+        cached = _CACHE["overview"]["data"]
+        if cached and (now - _CACHE["overview"]["ts"] < CACHE_TTL):
+            return cached
+        return _compute_fast_overview()
+
+
+async def get_fast_overview_async() -> dict:
+    now = time.time()
+    cached = _CACHE["overview"]["data"]
+    if cached and (now - _CACHE["overview"]["ts"] < CACHE_TTL):
+        return cached
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, get_fast_overview)
+
+
+def _compute_fast_overview() -> dict:
+    now = time.time()
     env = read_env()
     active_proj = env.get("ACTIVE_PROJECT", "")
     active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
@@ -580,11 +674,11 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 1.1 Fast Unified Overview
         elif clean_path == "/api/overview":
-            resp_data = get_fast_overview()
+            resp_data = await get_fast_overview_async()
 
         # 2. Status & Overview
         elif clean_path == "/api/status":
-            overview = get_fast_overview()
+            overview = await get_fast_overview_async()
             container_ok = overview["workstation"]["running"]
             app_ok = overview["app"]["running"]
             env = read_env()
@@ -639,7 +733,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/status":
-            overview = get_fast_overview()
+            overview = await get_fast_overview_async()
             app_ok = overview["app"]["running"]
             app_pid = overview["app"]["pid"]
             app_port = overview["app"].get("port", 5173)
@@ -711,12 +805,13 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             if not projects_list:
                 raw_lines.append("  (none)")
 
+            overview = await get_fast_overview_async()
             resp_data = {
                 "ok": True,
                 "projects": projects_list,
                 "raw": "\n".join(raw_lines),
                 "output": "\n".join(raw_lines),
-                "activeProject": get_active_project_git_info(active_proj, active_proj_path),
+                "activeProject": overview.get("activeProject"),
             }
         elif clean_path == "/api/projects/use":
             name = parsed_json.get("name", "").strip()
@@ -724,7 +819,9 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "Missing project name"}
             else:
-                ok, out = run_cmd(["ai", "use", name], timeout=45.0)
+                invalidate_cache()
+                ok, out = await run_cmd_async(["ai", "use", name], timeout=45.0)
+                invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/projects/add":
             url = parsed_json.get("url", "").strip()
@@ -732,7 +829,9 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "Missing repository url"}
             else:
-                ok, out = run_cmd(["ai", "add", url], timeout=120.0)
+                invalidate_cache()
+                ok, out = await run_cmd_async(["ai", "add", url], timeout=120.0)
+                invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/projects/remove":
             name = parsed_json.get("name", "").strip()
@@ -740,16 +839,22 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "Missing project name"}
             else:
-                ok, out = run_cmd(["ai", "remove", name], timeout=30.0)
+                invalidate_cache()
+                ok, out = await run_cmd_async(["ai", "remove", name], timeout=30.0)
+                invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
 
         # 6. Git Operations
         elif clean_path == "/api/git/pull":
-            ok, out = run_cmd(["ai", "pull"], timeout=60.0)
+            invalidate_cache()
+            ok, out = await run_cmd_async(["ai", "pull"], timeout=60.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/git/push":
+            invalidate_cache()
             msg = parsed_json.get("message", "Update from AI Workstation").strip()
-            ok, out = run_cmd(["ai", "push", msg], timeout=60.0)
+            ok, out = await run_cmd_async(["ai", "push", msg], timeout=60.0)
+            invalidate_cache()
             resp_data = {"ok": ok, "output": out}
 
         # 7. Harness & DSH
@@ -769,7 +874,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/status":
-            overview = get_fast_overview()
+            overview = await get_fast_overview_async()
             harness_ok = overview["harness"]["active"]
             summary = [
                 "=== Harness ===",
@@ -816,7 +921,8 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     DSH_DIR.mkdir(parents=True, exist_ok=True)
                     DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
                     DSH_UI_PROVIDERS_FILE.chmod(0o644)
-                    if is_container_running():
+                    overview = await get_fast_overview_async()
+                    if overview["workstation"]["running"]:
                         await run_cmd_async(
                             ["docker", "exec", "ai-workstation-cli", "/usr/local/bin/harness.sh", "sync"],
                             timeout=5.0,
@@ -832,7 +938,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 9. Preview & Anywhere URLs
         elif clean_path == "/api/preview":
-            overview = get_fast_overview()
+            overview = await get_fast_overview_async()
             env = read_env()
             active_proj = env.get("ACTIVE_PROJECT", "none")
             container_ok = overview["workstation"]["running"]
@@ -861,7 +967,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 10. Tunnel Operations
         elif clean_path == "/api/tunnel/status":
-            overview = get_fast_overview()
+            overview = await get_fast_overview_async()
             env = read_env()
             app_h = env.get("CLOUDFLARED_APP_HOSTNAME", "none")
             dsh_h = env.get("CLOUDFLARED_DSH_HOSTNAME", "none")
@@ -907,7 +1013,6 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "token, appHost, and dshHost are required"}
             else:
-                # Automate non-interactive setup
                 secrets_dir = ROOT / "secrets"
                 secrets_dir.mkdir(parents=True, exist_ok=True)
                 secrets_dir.chmod(0o700)
@@ -915,11 +1020,9 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 token_file.write_text(token)
                 token_file.chmod(0o600)
 
-                # Ensure cloudflared service installed
-                srv_installed, _ = run_cmd(["sudo", "cloudflared", "service", "install", token], timeout=30.0)
-                run_cmd(["sudo", "systemctl", "restart", "cloudflared"], timeout=10.0)
+                await run_cmd_async(["sudo", "cloudflared", "service", "install", token], timeout=30.0)
+                await run_cmd_async(["sudo", "systemctl", "restart", "cloudflared"], timeout=10.0)
 
-                # Update .env
                 env_vals = read_env()
                 env_vals["CLOUDFLARED_TOKEN_SET"] = "1"
                 env_vals["CLOUDFLARED_APP_HOSTNAME"] = app_host
@@ -931,15 +1034,16 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 lines = [f"{k}={v}" for k, v in env_vals.items()]
                 ENV_FILE.write_text("\n".join(lines) + "\n")
                 ENV_FILE.chmod(0o600)
+                invalidate_cache()
 
                 resp_data = {"ok": True, "output": "Cloudflare Tunnel connector configured successfully"}
 
         # 11. GitHub Integration
         elif clean_path == "/api/github/status":
-            ok, out = run_cmd(["ai", "github", "status"], timeout=5.0)
+            ok, out = await run_cmd_async(["ai", "github", "status"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/test":
-            ok, out = run_cmd(["ai", "github", "test"], timeout=15.0)
+            ok, out = await run_cmd_async(["ai", "github", "test"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/setup":
             app_id = parsed_json.get("appId", "").strip()
@@ -950,7 +1054,6 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "appId, installationId, and pemText are required"}
             else:
-                # Write PEM file directly to avoid passing multi-line RSA keys through shell argument strings
                 secrets_dir = ROOT / "secrets"
                 secrets_dir.mkdir(parents=True, exist_ok=True)
                 secrets_dir.chmod(0o700)
@@ -958,10 +1061,10 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 GITHUB_PEM_FILE.write_text(clean_pem)
                 GITHUB_PEM_FILE.chmod(0o600)
 
-                # Delegate setup to the canonical CLI implementation
-                ok, out = run_cmd(["ai", "github", "setup", app_id, inst_id, str(GITHUB_PEM_FILE)], timeout=15.0)
+                ok, out = await run_cmd_async(["ai", "github", "setup", app_id, inst_id, str(GITHUB_PEM_FILE)], timeout=15.0)
                 if ok:
-                    ok_test, test_out = run_cmd(["ai", "github", "test"], timeout=15.0)
+                    ok_test, test_out = await run_cmd_async(["ai", "github", "test"], timeout=15.0)
+                    invalidate_cache()
                     resp_data = {"ok": ok_test, "output": f"{out}\n\n{test_out}" if test_out else out}
                 else:
                     resp_data = {"ok": False, "output": out}
@@ -975,23 +1078,20 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status_code = 400
                 resp_data = {"ok": False, "output": "No command provided"}
             else:
-                # Disallow arbitrary system shutdown or root destructive commands if needed
                 if target == "workstation":
-                    # Execute inside the workstation container
-                    if not is_container_running():
+                    overview = await get_fast_overview_async()
+                    if not overview["workstation"]["running"]:
                         status_code = 400
                         resp_data = {"ok": False, "output": "Workstation container is not running. Start it first."}
                     else:
                         cmd = ["docker", "exec", "-i", "ai-workstation-cli", "sh", "-lc", command]
-                        ok, out = run_cmd(cmd, timeout=90.0)
+                        ok, out = await run_cmd_async(cmd, timeout=90.0)
                         resp_data = {"ok": ok, "output": out}
                 else:
-                    # Execute on host
                     if sudo_password:
-                        # Clean sudo prefix if already present so sudo -S controls execution
                         cmd_str = command[5:].strip() if command.startswith("sudo ") else command
                         cmd = ["sudo", "-S", "-p", "", "bash", "-lc", cmd_str]
-                        ok, out = run_cmd(cmd, timeout=90.0, input_data=f"{sudo_password}\n")
+                        ok, out = await run_cmd_async(cmd, timeout=90.0, input_data=f"{sudo_password}\n")
                         cleaned_out = out.strip()
                         requires_sudo = False
                         if not ok and ("incorrect password" in cleaned_out.lower() or "sorry, try again" in cleaned_out.lower()):
@@ -999,7 +1099,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         resp_data = {"ok": ok, "output": cleaned_out, "requiresSudo": requires_sudo}
                     else:
                         cmd = ["bash", "-lc", command]
-                        ok, out = run_cmd(cmd, timeout=90.0)
+                        ok, out = await run_cmd_async(cmd, timeout=90.0)
                         requires_sudo = False
                         if not ok:
                             low = out.lower()
@@ -1010,28 +1110,28 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                                 requires_sudo = True
                         resp_data = {"ok": ok, "output": out, "requiresSudo": requires_sudo}
         elif clean_path == "/api/cache":
-            ok, out = run_cmd(["ai", "cache"], timeout=15.0)
+            ok, out = await run_cmd_async(["ai", "cache"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/cache/clear":
             deps = parsed_json.get("deps", False)
             cmd = ["ai", "cache", "clear", "--yes"]
             if deps:
                 cmd.append("--deps")
-            ok, out = run_cmd(cmd, timeout=60.0)
+            ok, out = await run_cmd_async(cmd, timeout=60.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/doctor":
-            ok, out = run_cmd(["ai", "doctor"], timeout=20.0)
+            ok, out = await run_cmd_async(["ai", "doctor"], timeout=20.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/update":
-            ok, out = run_cmd(["ai", "update"], timeout=120.0)
+            ok, out = await run_cmd_async(["ai", "update"], timeout=120.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/upgrade":
-            ok, out = run_cmd(["ai", "upgrade"], timeout=180.0)
+            ok, out = await run_cmd_async(["ai", "upgrade"], timeout=180.0)
             resp_data = {"ok": ok, "output": out}
 
         # 13. State Management
         elif clean_path == "/api/state/export":
-            ok, out = run_cmd(["ai", "state", "export"], timeout=60.0)
+            ok, out = await run_cmd_async(["ai", "state", "export"], timeout=60.0)
             filename = ""
             if ok:
                 match = re.search(r"(ai-state-\d+-\d+\.tar\.gz)", out)
@@ -1044,12 +1144,10 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 "downloadUrl": f"/api/state/download?file={filename}" if filename else "",
             }
         elif clean_path == "/api/state/download":
-            # Send file directly
             query_file = ""
             if "?" in path:
                 query_file = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x).get("file", "")
             if not query_file:
-                # Latest
                 backups = sorted(BACKUPS_DIR.glob("ai-state-*.tar.gz"), reverse=True)
                 target = backups[0] if backups else None
             else:
@@ -1073,11 +1171,10 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": False, "output": "Archive not found"}
 
         elif clean_path == "/api/state/import":
-            # Saves upload and runs import
             BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
             temp_archive = BACKUPS_DIR / f"import-{int(time.time())}.tar.gz"
             temp_archive.write_bytes(body)
-            ok, out = run_cmd(["ai", "state", "import", str(temp_archive)], timeout=60.0)
+            ok, out = await run_cmd_async(["ai", "state", "import", str(temp_archive)], timeout=60.0)
             resp_data = {"ok": ok, "output": out}
 
         elif clean_path == "/api/models/fetch":
@@ -1267,7 +1364,7 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
     if endpoint == "/api/logs/app":
         APP_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
         APP_LOG_FILE.touch(exist_ok=True)
-        overview = get_fast_overview()
+        overview = await get_fast_overview_async()
         if not overview["app"]["running"]:
             try:
                 APP_LOG_FILE.write_text("", encoding="utf-8")
@@ -1281,15 +1378,24 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
     elif endpoint == "/api/tunnel/logs":
         target_cmd = ["sudo", "journalctl", "-u", "cloudflared", "-n", "80", "-f"]
 
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *target_cmd,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
+        _ACTIVE_SSE_PROCS.add(proc)
 
-        while True:
-            line = await proc.stdout.readline()
+        while not writer.is_closing():
+            try:
+                line = await asyncio.wait_for(proc.stdout.readline(), timeout=15.0)
+            except asyncio.TimeoutError:
+                writer.write(b": keepalive\n\n")
+                await writer.drain()
+                continue
+
             if not line:
                 break
             clean_line = line.decode("utf-8", errors="replace").rstrip("\r\n")
@@ -1300,15 +1406,25 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
     except Exception:
         pass
     finally:
+        if proc is not None:
+            _ACTIVE_SSE_PROCS.discard(proc)
+            try:
+                if proc.returncode is None:
+                    proc.kill()
+                await asyncio.wait_for(proc.wait(), timeout=2.0)
+            except Exception:
+                pass
         try:
-            writer.write(b"event: end\ndata: [STREAM_COMPLETED]\n\n")
-            await writer.drain()
+            if not writer.is_closing():
+                writer.write(b"event: end\ndata: [STREAM_COMPLETED]\n\n")
+                await writer.drain()
         except Exception:
             pass
         writer.close()
 
 
 async def main():
+    _reap_zombies_and_leaked_streams()
     server = await asyncio.start_server(handle_request, DAEMON_HOST, DAEMON_PORT)
     addr = server.sockets[0].getsockname()
     print(f"AI Workstation Host Control Daemon listening on http://{addr[0]}:{addr[1]}")

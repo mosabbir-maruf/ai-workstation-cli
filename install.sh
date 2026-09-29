@@ -200,6 +200,10 @@ Environment=AI_WORKSTATION_ROOT=$ROOT
 ExecStart=/usr/bin/python3 $ROOT/daemon/server.py
 Restart=always
 RestartSec=3
+TasksMax=infinity
+LimitNPROC=infinity
+LimitNOFILE=65535
+KillMode=control-group
 
 [Install]
 WantedBy=multi-user.target
