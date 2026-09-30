@@ -19,11 +19,15 @@ ENV_FILE="$ROOT/.env"
 COMPOSE_FILE="$ROOT/docker/compose.yml"
 PROJECTS_DIR="$HOME/projects"
 RUNTIME_DIR="$ROOT/runtime"
+HARNESS_RUNTIME_DIR="$RUNTIME_DIR/harness"
+APP_RUNTIME_DIR="$RUNTIME_DIR/app"
+APP_PID_FILE="$APP_RUNTIME_DIR/pid"
+APP_BRIDGE_PID_FILE="$APP_RUNTIME_DIR/bridge.pid"
 GITHUB_LIB="$ROOT/scripts/lib/github.sh"
 TUNNEL_LIB="$ROOT/scripts/lib/tunnel.sh"
 PORTS_LIB="$ROOT/scripts/lib/ports.sh"
 
-mkdir -p "$PROJECTS_DIR" "$RUNTIME_DIR"
+mkdir -p "$PROJECTS_DIR" "$RUNTIME_DIR" "$HARNESS_RUNTIME_DIR" "$APP_RUNTIME_DIR"
 
 die() {
     echo "ERROR: $*" >&2
@@ -338,8 +342,6 @@ cmd_push() {
     git push
 }
 
-HARNESS_RUNTIME_DIR="$RUNTIME_DIR/harness"
-
 harness_exec() {
     docker exec -i ai-workstation-cli \
         bash -s -- "$@" < "$ROOT/docker/harness.sh"
@@ -420,7 +422,7 @@ cmd_stop() {
     cmd_app_stop || true
     cmd_harness_stop || true
     compose down
-    rm -f "$APP_PID_FILE"
+    rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
     echo "Workstation stopped."
 }
 
@@ -428,9 +430,6 @@ cmd_restart() {
     compose restart
     cmd_harness_start
 }
-
-APP_RUNTIME_DIR="$RUNTIME_DIR/app"
-APP_PID_FILE="$APP_RUNTIME_DIR/pid"
 
 app_container_pid() {
     local pid=""
@@ -542,6 +541,7 @@ ensure_container_package_manager() {
 
 cmd_run() {
     require_active
+    load_env
 
     docker ps --format '{{.Names}}' |
         grep -qx ai-workstation-cli ||
@@ -610,7 +610,7 @@ cmd_run() {
         sudo chown -R 1001:1001 "$APP_RUNTIME_DIR" 2>/dev/null || true
     fi
 
-    rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid"
+    rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
 
     echo "Checking dependencies..."
     ensure_container_package_manager "$manager"
@@ -641,7 +641,6 @@ cmd_run() {
     echo "Bind: $bind_note"
     echo "Command: $command"
 
-    load_env
     local env_allowed_hosts="${ALLOWED_HOSTS:-${CLOUDFLARED_APP_HOSTNAME:-}}"
     local exec_env_flags=()
     if [[ -n "$env_allowed_hosts" ]]; then
@@ -674,7 +673,7 @@ cmd_run() {
         docker exec ai-workstation-cli \
             sh -c 'tail -n 80 /run/ai-workstation-cli/app/app.log' >&2 || true
 
-        rm -f "$APP_PID_FILE"
+        rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
         return 1
     fi
 
@@ -696,7 +695,7 @@ cmd_app_stop() {
     pid="$(app_container_pid || true)"
 
     if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
-        rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid"
+        rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
         : > "$APP_RUNTIME_DIR/app.log" 2>/dev/null || true
         echo "Project is not running."
         return 0
@@ -711,19 +710,31 @@ cmd_app_stop() {
         pgid="$(docker exec ai-workstation-cli sh -c "ps -o pgid= -p $pid 2>/dev/null | tr -d ' '" 2>/dev/null || true)"
     fi
 
+    local bridge_pid=""
+    if [[ -f "$APP_BRIDGE_PID_FILE" ]]; then
+        bridge_pid="$(<"$APP_BRIDGE_PID_FILE")"
+        bridge_pid="${bridge_pid//[[:space:]]/}"
+    fi
+
     docker exec ai-workstation-cli sh -c "
         if [ -n '$pgid' ] && [ '$pgid' != '1' ]; then
             kill -TERM -- -$pgid 2>/dev/null || true
         fi
         kill -TERM $pid 2>/dev/null || true
+        if [ -n '$bridge_pid' ]; then
+            kill -TERM $bridge_pid 2>/dev/null || true
+        fi
         sleep 0.4
         if [ -n '$pgid' ] && [ '$pgid' != '1' ]; then
             kill -KILL -- -$pgid 2>/dev/null || true
         fi
         kill -KILL $pid 2>/dev/null || true
+        if [ -n '$bridge_pid' ]; then
+            kill -KILL $bridge_pid 2>/dev/null || true
+        fi
     " >/dev/null 2>&1 || true
 
-    rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid"
+    rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
     : > "$APP_RUNTIME_DIR/app.log" 2>/dev/null || true
 
     echo "Project stopped."

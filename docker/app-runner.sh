@@ -4,6 +4,7 @@ set -u
 APP_DIR="/run/ai-workstation-cli/app"
 PID_FILE="$APP_DIR/pid"
 PGID_FILE="$APP_DIR/pgid"
+BRIDGE_PID_FILE="$APP_DIR/bridge.pid"
 LOG_FILE="$APP_DIR/app.log"
 
 # Ensure app-runner itself is a session/process-group leader (PGID == $$)
@@ -15,7 +16,7 @@ if [[ -n "$current_pgid" && "$current_pgid" != "$$" && "${_AIWS_SETSID:-0}" != "
 fi
 
 mkdir -p "$APP_DIR" 2>/dev/null || true
-rm -f "$PID_FILE" "$PGID_FILE"
+rm -f "$PID_FILE" "$PGID_FILE" "$BRIDGE_PID_FILE"
 export PATH="/home/sandbox/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin:${PATH:-}"
 export HOST="${HOST:-0.0.0.0}"
 export HOSTNAME="${HOSTNAME:-0.0.0.0}"
@@ -65,9 +66,12 @@ function probeAndBridge() {
             from.on("error", () => to.destroy());
             to.on("error", () => from.destroy());
           });
-          server.on("error", () => {});
+          server.on("error", () => {
+            activeBridge = null;
+          });
           server.listen(secondary, "0.0.0.0", () => {
             activeBridge = server;
+            clearInterval(timer);
           });
         } catch {}
       });
@@ -78,12 +82,13 @@ function probeAndBridge() {
   tryBridge(p2, p1);
 }
 
-setInterval(probeAndBridge, 1000);
+const timer = setInterval(probeAndBridge, 1000);
 ' >/dev/null 2>&1 &
 bridge_pid=$!
+echo "$bridge_pid" > "$BRIDGE_PID_FILE" 2>/dev/null || true
 
 cleanup() {
-    rm -f "$PID_FILE" "$PGID_FILE"
+    rm -f "$PID_FILE" "$PGID_FILE" "$BRIDGE_PID_FILE"
     kill "$bridge_pid" 2>/dev/null || true
 }
 trap cleanup EXIT
