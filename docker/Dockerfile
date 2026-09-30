@@ -18,6 +18,11 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
+RUN corepack enable \
+    && npm install --prefix /usr/local -g pnpm yarn \
+    && echo 'export PATH="/home/sandbox/.npm-global/bin:$PATH"' > /etc/profile.d/npm-global.sh \
+    && chmod 0644 /etc/profile.d/npm-global.sh
+
 RUN useradd \
     --create-home \
     --shell /bin/bash \

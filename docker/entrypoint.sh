@@ -12,6 +12,21 @@ DSH_LINK="/home/sandbox/.npm-global/bin/dsh"
 
 mkdir -p "$NPM_CONFIG_PREFIX/bin"
 
+# Ensure environment files for login/interactive shells include npm-global in PATH
+mkdir -p "$HOME" 2>/dev/null || true
+if ! grep -q 'npm-global/bin' "$HOME/.profile" 2>/dev/null; then
+    echo 'export PATH="/home/sandbox/.npm-global/bin:$PATH"' >> "$HOME/.profile" 2>/dev/null || true
+fi
+if ! grep -q 'npm-global/bin' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'export PATH="/home/sandbox/.npm-global/bin:$PATH"' >> "$HOME/.bashrc" 2>/dev/null || true
+fi
+
+# Pre-install pnpm if missing so it is immediately available
+if ! command -v pnpm >/dev/null 2>&1; then
+    echo "Pre-installing pnpm..."
+    npm install --prefix "$NPM_CONFIG_PREFIX" -g pnpm 2>/dev/null || true
+fi
+
 if [[ ! -f "$DSH_BIN" ]]; then
     echo "Installing DeepSeek Harness ${DSH_VERSION}..."
 

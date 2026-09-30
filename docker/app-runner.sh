@@ -16,11 +16,11 @@ fi
 
 mkdir -p "$APP_DIR" 2>/dev/null || true
 rm -f "$PID_FILE" "$PGID_FILE"
-: > "$LOG_FILE"
+export PATH="/home/sandbox/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin:${PATH:-}"
 
 cd /workspace || exit 1
 
-bash -lc 'exec "$@"' -- "$@" >>"$LOG_FILE" 2>&1 &
+bash -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; exec "$@"' -- "$@" >>"$LOG_FILE" 2>&1 &
 child_pid=$!
 pgid="$$"
 
