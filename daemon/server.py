@@ -873,6 +873,86 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": ok, "output": out}
 
         # 6. Git Operations
+        elif clean_path == "/api/git/diff":
+            env = read_env()
+            active_proj = env.get("ACTIVE_PROJECT", "")
+            active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
+
+            if not active_proj or not active_proj_path:
+                resp_data = {
+                    "ok": True,
+                    "clean": True,
+                    "project": active_proj or "none",
+                    "path": active_proj_path or "none",
+                    "filesCount": 0,
+                    "files": [],
+                    "stat": "",
+                    "diff": "",
+                    "output": "No active project configured.",
+                }
+            elif not Path(active_proj_path).is_dir() or not (Path(active_proj_path) / ".git").is_dir():
+                resp_data = {
+                    "ok": False,
+                    "clean": True,
+                    "project": active_proj,
+                    "path": active_proj_path,
+                    "filesCount": 0,
+                    "files": [],
+                    "stat": "",
+                    "diff": "",
+                    "output": f"Active project path is not a git repository: {active_proj_path}",
+                }
+            else:
+                cmd = [
+                    "sh",
+                    "-c",
+                    'git -C "$1" status --porcelain && echo "---GIT_DIFF_BOUNDARY---" && (git -C "$1" diff HEAD 2>/dev/null || git -C "$1" diff) && echo "---GIT_DIFF_BOUNDARY---" && (git -C "$1" diff --stat HEAD 2>/dev/null || git -C "$1" diff --stat)',
+                    "sh",
+                    active_proj_path,
+                ]
+                ok, out = await run_cmd_async(cmd, timeout=15.0)
+                if not ok:
+                    resp_data = {
+                        "ok": False,
+                        "clean": True,
+                        "project": active_proj,
+                        "path": active_proj_path,
+                        "filesCount": 0,
+                        "files": [],
+                        "stat": "",
+                        "diff": "",
+                        "output": out or "Failed to inspect git diff.",
+                    }
+                else:
+                    parts = out.split("---GIT_DIFF_BOUNDARY---")
+                    status_part = parts[0].strip() if len(parts) > 0 else ""
+                    diff_part = parts[1].strip() if len(parts) > 1 else ""
+                    stat_part = parts[2].strip() if len(parts) > 2 else ""
+
+                    files = []
+                    if status_part:
+                        for line in status_part.splitlines():
+                            line_str = line.strip()
+                            if len(line) >= 3:
+                                st = line[:2].strip()
+                                fpath = line[3:].strip()
+                                files.append({"status": st, "path": fpath})
+                            elif line_str:
+                                files.append({"status": "M", "path": line_str})
+
+                    is_clean = len(files) == 0 and not diff_part
+
+                    resp_data = {
+                        "ok": True,
+                        "clean": is_clean,
+                        "project": active_proj,
+                        "path": active_proj_path,
+                        "filesCount": len(files),
+                        "files": files,
+                        "stat": stat_part,
+                        "diff": diff_part,
+                        "output": diff_part or (stat_part if stat_part else ("Working tree clean (no changes)" if is_clean else status_part)),
+                    }
         elif clean_path == "/api/git/pull":
             invalidate_cache()
             ok, out = await run_cmd_async(["ai", "pull"], timeout=60.0)

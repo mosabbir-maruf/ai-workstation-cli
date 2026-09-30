@@ -30,6 +30,14 @@ die() {
     exit 1
 }
 
+_sed_i() {
+    if sed --version 2>&1 | grep -q "GNU"; then
+        sed -i "$@"
+    else
+        sed -i '' "$@"
+    fi
+}
+
 load_env() {
     [[ -f "$ENV_FILE" ]] || cp "$ROOT/.env.example" "$ENV_FILE"
 
@@ -44,10 +52,11 @@ load_env() {
     [[ -n "$env_image" ]] && IMAGE="$env_image"
     [[ -n "$env_dsh_version" ]] && DSH_VERSION="$env_dsh_version"
     [[ -n "$env_root" ]] && AI_WORKSTATION_ROOT="$env_root"
+
     if [[ ! -d "${AI_WORKSTATION_ROOT:-}" || ! -f "${AI_WORKSTATION_ROOT:-}/broker/github_broker.py" ]]; then
         AI_WORKSTATION_ROOT="$ROOT"
         if grep -q '^AI_WORKSTATION_ROOT=' "$ENV_FILE" 2>/dev/null; then
-            sed -i "s|^AI_WORKSTATION_ROOT=.*|AI_WORKSTATION_ROOT=${ROOT}|" "$ENV_FILE"
+            _sed_i "s|^AI_WORKSTATION_ROOT=.*|AI_WORKSTATION_ROOT=${ROOT}|" "$ENV_FILE"
         fi
     fi
 
@@ -64,7 +73,7 @@ set_env_var() {
     local value="$2"
     [[ -f "$ENV_FILE" ]] || cp "$ROOT/.env.example" "$ENV_FILE"
     if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+        _sed_i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
     else
         printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
     fi
@@ -253,6 +262,20 @@ cmd_use() {
 
     echo "Active project: $name"
     echo "Path: $path"
+}
+
+cmd_diff() {
+    require_active
+    cd "$ACTIVE_PROJECT_PATH"
+    if [[ ! -d ".git" ]]; then
+        die "Not a git repository: $ACTIVE_PROJECT_PATH"
+    fi
+
+    echo "=== Working Tree Status ==="
+    git status --short
+    echo ""
+    echo "=== Working Tree Diff ==="
+    git diff HEAD 2>/dev/null || git diff
 }
 
 cmd_pull() {
@@ -1800,6 +1823,7 @@ ${_C_BOLD}Projects:${_C_RESET}
   ai remove <project>       Remove a project from ~/projects
 
 ${_C_BOLD}Git (Zero-PAT Broker):${_C_RESET}
+  ai diff                   Show working tree status and diff in active project
   ai pull                   Pull latest changes in active project
   ai push "commit message"  Stage, commit, and push changes
 
@@ -1832,6 +1856,7 @@ case "${1:-}" in
     remove) shift; cmd_remove "$@" ;;
     list) cmd_list ;;
     use) shift; cmd_use "$@" ;;
+    diff) cmd_diff ;;
     pull) cmd_pull ;;
     push) shift; cmd_push "$@" ;;
     start) cmd_start ;;
