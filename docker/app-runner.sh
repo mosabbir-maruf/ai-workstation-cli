@@ -17,17 +17,21 @@ fi
 mkdir -p "$APP_DIR" 2>/dev/null || true
 rm -f "$PID_FILE" "$PGID_FILE"
 export PATH="/home/sandbox/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin:${PATH:-}"
+cd /workspace || exit 1
 
-# Normalize arguments: if invoked with `bash -lc` or `sh -lc`, convert to `-c`
-# so Debian /etc/profile does not overwrite PATH and strip npm-global/bin.
-cmd_args=("$@")
-if [[ "${cmd_args[0]:-}" == "bash" && "${cmd_args[1]:-}" == "-lc" ]]; then
-    cmd_args[1]="-c"
-elif [[ "${cmd_args[0]:-}" == "sh" && "${cmd_args[1]:-}" == "-lc" ]]; then
-    cmd_args[1]="-c"
+# Normalize arguments: if single string, wrap in bash -c; if bash -lc / sh -lc, strip -l
+if [[ "$#" -eq 1 ]]; then
+    cmd_args=(bash -c "$1")
+else
+    cmd_args=("$@")
+    if [[ "${cmd_args[0]:-}" == "bash" || "${cmd_args[0]:-}" == "sh" ]]; then
+        if [[ "${cmd_args[1]:-}" == "-lc" || "${cmd_args[1]:-}" == "-cl" ]]; then
+            cmd_args[1]="-c"
+        fi
+    fi
 fi
 
-bash -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; exec "$@"' _ "${cmd_args[@]}" >>"$LOG_FILE" 2>&1 &
+"${cmd_args[@]}" >>"$LOG_FILE" 2>&1 &
 child_pid=$!
 pgid="$$"
 

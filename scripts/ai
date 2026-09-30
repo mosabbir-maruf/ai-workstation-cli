@@ -499,17 +499,21 @@ detect_package_manager() {
     fi
 }
 
+container_has_command() {
+    docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v \"$1\" >/dev/null 2>&1"
+}
+
 ensure_container_package_manager() {
     local mgr="$1"
     [[ "$mgr" == "npm" ]] && return 0
 
-    # Fast path: check persistent host mount first (0ms, avoids docker IPC overhead)
+    # Fast path 1: check persistent host mount first (0ms, avoids docker IPC overhead)
     if [[ -x "$RUNTIME_DIR/npm-global/bin/$mgr" ]]; then
         return 0
     fi
 
-    # Container check: check if manager is pre-installed in image PATH
-    if docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
+    # Fast path 2: check container PATH
+    if container_has_command "$mgr"; then
         return 0
     fi
 
@@ -530,7 +534,7 @@ ensure_container_package_manager() {
             ;;
     esac
 
-    if ! docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
+    if ! container_has_command "$mgr"; then
         die "Failed to install package manager '$mgr' inside workstation container."
     fi
     echo "✓ Package manager '$mgr' installed successfully."
@@ -646,7 +650,7 @@ cmd_run() {
 
     docker exec -d "${exec_env_flags[@]}" ai-workstation-cli \
         /usr/local/bin/app-runner.sh \
-        bash -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; exec $command" >/dev/null
+        bash -c "$command" >/dev/null
 
     local ready=0
     local i
