@@ -991,6 +991,68 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     "ok": ok,
                     "output": out or ("Command executed successfully with zero output." if ok else "Command failed with no output."),
                 }
+        elif clean_path == "/api/git/config":
+            env = read_env()
+            active_proj = env.get("ACTIVE_PROJECT", "")
+            active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
+
+            if method == "GET":
+                name = ""
+                email = ""
+                if active_proj_path and Path(active_proj_path).is_dir():
+                    _, name = await run_cmd_async(["git", "-C", active_proj_path, "config", "user.name"], timeout=5.0)
+                    _, email = await run_cmd_async(["git", "-C", active_proj_path, "config", "user.email"], timeout=5.0)
+                if not name.strip():
+                    _, name = await run_cmd_async(["git", "config", "--global", "user.name"], timeout=5.0)
+                if not email.strip():
+                    _, email = await run_cmd_async(["git", "config", "--global", "user.email"], timeout=5.0)
+
+                name = name.strip()
+                email = email.strip()
+
+                is_invalid = (
+                    not email
+                    or "@" not in email
+                    or email.endswith(".internal.cloudapp.net")
+                    or email.endswith(".local")
+                    or "@localhost" in email
+                )
+                resp_data = {
+                    "ok": True,
+                    "name": name,
+                    "email": email,
+                    "isConfigured": not is_invalid and bool(name),
+                }
+            elif method == "POST":
+                name = parsed_json.get("name", "").strip()
+                email = parsed_json.get("email", "").strip()
+
+                if not name or not email:
+                    status_code = 400
+                    resp_data = {"ok": False, "output": "Both author name and email are required."}
+                elif "@" not in email:
+                    status_code = 400
+                    resp_data = {"ok": False, "output": "Please provide a valid email address."}
+                else:
+                    cmds = [
+                        ["git", "config", "--global", "user.name", name],
+                        ["git", "config", "--global", "user.email", email],
+                    ]
+                    if active_proj_path and Path(active_proj_path).is_dir():
+                        cmds.extend([
+                            ["git", "-C", active_proj_path, "config", "user.name", name],
+                            ["git", "-C", active_proj_path, "config", "user.email", email],
+                        ])
+                    for c in cmds:
+                        await run_cmd_async(c, timeout=5.0)
+                    invalidate_cache()
+                    resp_data = {
+                        "ok": True,
+                        "name": name,
+                        "email": email,
+                        "isConfigured": True,
+                        "output": "Git author credentials configured successfully.",
+                    }
 
         # 7. Harness & DSH
         elif clean_path == "/api/harness/start":
