@@ -964,6 +964,33 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             ok, out = await run_cmd_async(["ai", "push", msg], timeout=60.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
+        elif clean_path == "/api/git/exec":
+            env = read_env()
+            active_proj = env.get("ACTIVE_PROJECT", "")
+            active_proj_path = env.get("ACTIVE_PROJECT_PATH", "")
+            raw_command = parsed_json.get("command", "").strip()
+
+            if not active_proj or not active_proj_path:
+                status_code = 400
+                resp_data = {"ok": False, "output": "No active project configured."}
+            elif not Path(active_proj_path).is_dir() or not (Path(active_proj_path) / ".git").is_dir():
+                status_code = 400
+                resp_data = {"ok": False, "output": f"Active project path is not a git repository: {active_proj_path}"}
+            elif not raw_command:
+                status_code = 400
+                resp_data = {"ok": False, "output": "No git command provided."}
+            else:
+                clean_cmd = raw_command
+                if clean_cmd.startswith("git "):
+                    clean_cmd = clean_cmd[4:].strip()
+                invalidate_cache()
+                cmd = ["sh", "-c", f'git -C "$1" {clean_cmd}', "sh", active_proj_path]
+                ok, out = await run_cmd_async(cmd, timeout=60.0)
+                invalidate_cache()
+                resp_data = {
+                    "ok": ok,
+                    "output": out or ("Command executed successfully with zero output." if ok else "Command failed with no output."),
+                }
 
         # 7. Harness & DSH
         elif clean_path == "/api/harness/start":

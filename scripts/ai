@@ -284,6 +284,12 @@ cmd_pull() {
     git pull --ff-only
 }
 
+cmd_git() {
+    require_active
+    cd "$ACTIVE_PROJECT_PATH"
+    git "$@"
+}
+
 cmd_push() {
     local message="${1:-}"
     [[ -n "$message" ]] || die 'Usage: ai push "commit message"'
@@ -1863,6 +1869,7 @@ case "${1:-}" in
     diff) cmd_diff ;;
     pull) cmd_pull ;;
     push) shift; cmd_push "$@" ;;
+    git) shift; cmd_git "$@" ;;
     start) cmd_start ;;
     stop) cmd_stop ;;
     restart) cmd_restart ;;
