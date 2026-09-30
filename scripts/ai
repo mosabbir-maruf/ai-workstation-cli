@@ -1013,6 +1013,10 @@ EOF
 cmd_update() {
     git -C "$ROOT" pull --ff-only
     compose pull
+    if is_daemon_running; then
+        echo "Restarting Host Control Daemon..."
+        cmd_daemon restart
+    fi
 }
 
 cmd_upgrade() {
