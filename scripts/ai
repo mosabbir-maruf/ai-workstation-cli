@@ -501,38 +501,39 @@ detect_package_manager() {
 
 ensure_container_package_manager() {
     local mgr="$1"
+    [[ "$mgr" == "npm" ]] && return 0
+
+    # Fast path: check persistent host mount first (0ms, avoids docker IPC overhead)
+    if [[ -x "$RUNTIME_DIR/npm-global/bin/$mgr" ]]; then
+        return 0
+    fi
+
+    # Container check: check if manager is pre-installed in image PATH
+    if docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
+        return 0
+    fi
+
+    echo "Package manager '$mgr' not found in container. Installing globally..."
     case "$mgr" in
-        npm)
-            return 0
+        pnpm)
+            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g pnpm
             ;;
-        pnpm|yarn|bun)
-            if docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
-                return 0
-            fi
-
-            echo "Package manager '$mgr' not found in container. Installing globally..."
-            case "$mgr" in
-                pnpm)
-                    docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g pnpm
-                    ;;
-                yarn)
-                    docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g yarn
-                    ;;
-                bun)
-                    docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g bun 2>/dev/null || \
-                        docker exec ai-workstation-cli sh -c "curl -fsSL https://bun.sh/install | bash"
-                    ;;
-            esac
-
-            if ! docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
-                die "Failed to install package manager '$mgr' inside workstation container."
-            fi
-            echo "✓ Package manager '$mgr' installed successfully."
+        yarn)
+            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g yarn
+            ;;
+        bun)
+            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g bun 2>/dev/null || \
+                docker exec ai-workstation-cli sh -c "curl -fsSL https://bun.sh/install | bash"
             ;;
         *)
             die "Unsupported package manager: $mgr"
             ;;
     esac
+
+    if ! docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v $mgr >/dev/null 2>&1"; then
+        die "Failed to install package manager '$mgr' inside workstation container."
+    fi
+    echo "✓ Package manager '$mgr' installed successfully."
 }
 
 cmd_run() {
@@ -610,33 +611,21 @@ cmd_run() {
     echo "Checking dependencies..."
     ensure_container_package_manager "$manager"
 
-    if ! docker exec ai-workstation-cli sh -c '
-        export PATH="/home/sandbox/.npm-global/bin:$PATH"
-        test -d /workspace/node_modules
-    '; then
+    # Fast path: test if node_modules exists directly on host mount (0ms, avoids docker IPC overhead)
+    if [[ ! -d "$ACTIVE_PROJECT_PATH/node_modules" || -z "$(ls -A "$ACTIVE_PROJECT_PATH/node_modules" 2>/dev/null)" ]]; then
         echo "Dependencies missing. Installing from lockfile..."
 
+        local install_cmd
         case "$manager" in
-            npm)
-                docker exec ai-workstation-cli \
-                    sh -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; cd /workspace && (npm ci 2>/dev/null || npm install)'
-                ;;
-            pnpm)
-                docker exec ai-workstation-cli \
-                    sh -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; cd /workspace && (pnpm install --frozen-lockfile 2>/dev/null || pnpm install)'
-                ;;
-            yarn)
-                docker exec ai-workstation-cli \
-                    sh -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; cd /workspace && (yarn install --immutable 2>/dev/null || yarn install)'
-                ;;
-            bun)
-                docker exec ai-workstation-cli \
-                    sh -c 'export PATH="/home/sandbox/.npm-global/bin:$PATH"; cd /workspace && (bun install --frozen-lockfile 2>/dev/null || bun install)'
-                ;;
-            *)
-                die "Unsupported package manager: $manager"
-                ;;
+            npm)  install_cmd='npm ci 2>/dev/null || npm install' ;;
+            pnpm) install_cmd='pnpm install --frozen-lockfile 2>/dev/null || pnpm install' ;;
+            yarn) install_cmd='yarn install --immutable 2>/dev/null || yarn install' ;;
+            bun)  install_cmd='bun install --frozen-lockfile 2>/dev/null || bun install' ;;
+            *)    die "Unsupported package manager: $manager" ;;
         esac
+
+        docker exec ai-workstation-cli \
+            sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; cd /workspace && ($install_cmd)"
 
         echo "Dependencies installed."
     else
