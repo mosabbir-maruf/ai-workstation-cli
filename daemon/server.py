@@ -217,23 +217,67 @@ def get_detected_ports() -> list:
     return []
 
 
-def is_app_running(container_ok: bool = None) -> bool:
+def get_app_process_info(container_ok: bool = None) -> tuple[bool, str]:
+    """Returns (is_running, pid). Verifies process existence inside container, not false-positive host ports."""
     if container_ok is False:
-        return False
-    if not APP_PID_FILE.is_file():
-        return False
+        return False, "—"
+    if container_ok is None:
+        container_ok = is_container_running()
+    if not container_ok:
+        return False, "—"
+
+    # 1. Check APP_PID_FILE and confirm process is actually running in container
+    if APP_PID_FILE.is_file():
+        try:
+            pid = APP_PID_FILE.read_text().strip()
+            if pid.isdigit():
+                ok, _ = _run_cmd_sync(
+                    ["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"],
+                    timeout=1.5,
+                )
+                if ok:
+                    return True, pid
+                else:
+                    try:
+                        APP_PID_FILE.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # 2. Fallback: detect dev-server process inside the container
     try:
-        pid = APP_PID_FILE.read_text().strip()
-        if not pid.isdigit():
-            return False
-        if container_ok is None:
-            container_ok = is_container_running()
-        if not container_ok:
-            return False
-        ok, _ = _run_cmd_sync(["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"], timeout=2.0)
-        return ok
+        ok, proc_pid = _run_cmd_sync(
+            [
+                "docker",
+                "exec",
+                "ai-workstation-cli",
+                "sh",
+                "-c",
+                (
+                    "ps -eo pid=,args= 2>/dev/null | awk "
+                    "'/node_modules\\/\\.bin\\/(vite|next|nuxt|astro|svelte-kit|webpack|react-scripts|tsx|ts-node|nodemon)|npm run dev|pnpm dev|yarn dev|bun run dev|vite --host|next dev/ "
+                    "&& !/awk/ && !/@deepseek-ai\\/dsh/ { print $1; exit }'"
+                ),
+            ],
+            timeout=2.0,
+        )
+        cleaned_proc_pid = proc_pid.strip() if ok and proc_pid else ""
+        if cleaned_proc_pid.isdigit():
+            try:
+                APP_PID_FILE.write_text(cleaned_proc_pid)
+            except Exception:
+                pass
+            return True, cleaned_proc_pid
     except Exception:
-        return False
+        pass
+
+    return False, "—"
+
+
+def is_app_running(container_ok: bool = None) -> bool:
+    running, _ = get_app_process_info(container_ok)
+    return running
 
 
 def format_bytes(b: int) -> str:
@@ -449,12 +493,11 @@ def _compute_fast_overview() -> dict:
 
     container_ok = is_container_running()
 
-    app_ok = False
-    app_pid = "—"
+    app_ok, app_pid = get_app_process_info(container_ok)
     configured_port = int(env.get("CLOUDFLARED_APP_PORT") or "5173")
     active_app_port = configured_port
 
-    if container_ok:
+    if app_ok:
         candidate_ports = []
         for p in (configured_port, 5173, 3000, 3001, 8080):
             if p not in candidate_ports:
@@ -462,23 +505,8 @@ def _compute_fast_overview() -> dict:
 
         for p in candidate_ports:
             if is_port_open(p):
-                app_ok = True
                 active_app_port = p
                 break
-
-        if APP_PID_FILE.is_file():
-            try:
-                pid_raw = APP_PID_FILE.read_text().strip()
-                if pid_raw.isdigit():
-                    app_pid = pid_raw
-                    if not app_ok:
-                        ok, _ = _run_cmd_sync(
-                            ["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {app_pid} 2>/dev/null"],
-                            timeout=1.5,
-                        )
-                        app_ok = ok
-            except Exception:
-                pass
 
     harness_active = (
         container_ok
