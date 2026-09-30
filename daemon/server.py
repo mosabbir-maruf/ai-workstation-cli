@@ -1478,18 +1478,34 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             pass
 
                 elif provider == "openrouter":
-                    models = ["deepseek/deepseek-r1", "deepseek/deepseek-chat", "anthropic/claude-3.7-sonnet", "openai/gpt-4o", "meta-llama/llama-3.3-70b-instruct"]
+                    models = [
+                        "deepseek/deepseek-r1:free",
+                        "deepseek/deepseek-chat:free",
+                        "meta-llama/llama-3.3-70b-instruct:free",
+                        "qwen/qwen-2.5-coder-32b-instruct:free",
+                        "google/gemini-2.0-flash-exp:free",
+                        "mistralai/mistral-small-24b-instruct-2501:free",
+                        "nvidia/nemotron-3.5-lightning:free",
+                        "deepseek/deepseek-r1",
+                        "deepseek/deepseek-chat",
+                        "anthropic/claude-3.7-sonnet",
+                        "openai/gpt-4o",
+                        "meta-llama/llama-3.3-70b-instruct",
+                    ]
                     try:
                         headers = {"Accept": "application/json"}
                         if api_key:
                             headers["Authorization"] = f"Bearer {api_key}"
                         req = Request("https://openrouter.ai/api/v1/models", headers=headers)
-                        with urlopen(req, timeout=6) as res:
+                        with urlopen(req, timeout=8) as res:
                             data = json.loads(res.read().decode("utf-8", errors="replace"))
                             if "data" in data and isinstance(data["data"], list):
                                 fetched = [m["id"] for m in data["data"] if isinstance(m, dict) and "id" in m]
                                 if fetched:
-                                    models = fetched[:50]
+                                    models = sorted(
+                                        fetched,
+                                        key=lambda x: (not (":free" in x.lower() or x.lower().endswith("free")), x.lower()),
+                                    )
                     except Exception:
                         pass
 
