@@ -582,12 +582,14 @@ cmd_run() {
         local next_cfgs=("$ACTIVE_PROJECT_PATH"/next.config.*)
         shopt -u nullglob
 
+        local target_port="${CLOUDFLARED_APP_PORT:-}"
+
         if [[ "${#host_flag_cfgs[@]}" -gt 0 ]]; then
-            host_args="--host 0.0.0.0"
+            host_args="--host 0.0.0.0${target_port:+ --port $target_port}"
         elif [[ "${#next_cfgs[@]}" -gt 0 ]]; then
-            host_args="-H 0.0.0.0"
+            host_args="-H 0.0.0.0${target_port:+ -p $target_port}"
         elif [[ -f "$ACTIVE_PROJECT_PATH/angular.json" ]]; then
-            host_args="--host 0.0.0.0"
+            host_args="--host 0.0.0.0${target_port:+ --port $target_port}"
         fi
 
         [[ -n "$host_args" ]] && bind_note="auto ($host_args)"
@@ -644,6 +646,9 @@ cmd_run() {
     local exec_env_flags=()
     if [[ -n "$env_allowed_hosts" ]]; then
         exec_env_flags+=(-e "ALLOWED_HOSTS=$env_allowed_hosts")
+    fi
+    if [[ -n "${CLOUDFLARED_APP_PORT:-}" ]]; then
+        exec_env_flags+=(-e "PORT=${CLOUDFLARED_APP_PORT}")
     fi
 
     docker exec -d "${exec_env_flags[@]}" ai-workstation-cli \
@@ -739,6 +744,15 @@ cmd_app_status() {
 
     if app_running; then
         echo "Status: running"
+        local detected_port=""
+        if [[ -f "$PORTS_LIB" ]]; then
+            detected_port="$(bash "$PORTS_LIB" 2>/dev/null || true)"
+        fi
+        if [[ -n "$detected_port" ]]; then
+            echo "Port: :${detected_port%% *}"
+        elif [[ -n "${CLOUDFLARED_APP_PORT:-}" ]]; then
+            echo "Port: :${CLOUDFLARED_APP_PORT}"
+        fi
         echo "PID: $(app_container_pid)"
     else
         echo "Status: stopped"

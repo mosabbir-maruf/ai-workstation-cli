@@ -40,8 +40,51 @@ pgid="$$"
 echo "$child_pid" > "$PID_FILE"
 echo "$pgid" > "$PGID_FILE"
 
+# Dual-port bridge: ensure both 3000 and 5173 reach the active application
+node -e '
+const net = require("net");
+const p1 = 3000, p2 = 5173;
+let activeBridge = null;
+
+function probeAndBridge() {
+  if (activeBridge) return;
+  function tryBridge(primary, secondary) {
+    const probe = net.createConnection({ port: primary, host: "127.0.0.1" });
+    probe.on("connect", () => {
+      probe.destroy();
+      const checkSecondary = net.createConnection({ port: secondary, host: "127.0.0.1" });
+      checkSecondary.on("connect", () => {
+        checkSecondary.destroy();
+      });
+      checkSecondary.on("error", () => {
+        try {
+          const server = net.createServer((from) => {
+            const to = net.createConnection({ port: primary, host: "127.0.0.1" });
+            from.pipe(to);
+            to.pipe(from);
+            from.on("error", () => to.destroy());
+            to.on("error", () => from.destroy());
+          });
+          server.on("error", () => {});
+          server.listen(secondary, "0.0.0.0", () => {
+            activeBridge = server;
+          });
+        } catch {}
+      });
+    });
+    probe.on("error", () => {});
+  }
+  tryBridge(p1, p2);
+  tryBridge(p2, p1);
+}
+
+setInterval(probeAndBridge, 1000);
+' >/dev/null 2>&1 &
+bridge_pid=$!
+
 cleanup() {
     rm -f "$PID_FILE" "$PGID_FILE"
+    kill "$bridge_pid" 2>/dev/null || true
 }
 trap cleanup EXIT
 
