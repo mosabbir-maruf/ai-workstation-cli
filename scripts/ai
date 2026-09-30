@@ -646,7 +646,7 @@ cmd_run() {
 
     docker exec -d "${exec_env_flags[@]}" ai-workstation-cli \
         /usr/local/bin/app-runner.sh \
-        bash -lc "$command" >/dev/null
+        bash -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; exec $command" >/dev/null
 
     local ready=0
     local i
@@ -665,7 +665,7 @@ cmd_run() {
         echo "Recent logs:" >&2
 
         docker exec ai-workstation-cli \
-            sh -lc 'tail -n 80 /run/ai-workstation-cli/app/app.log' >&2 || true
+            sh -c 'tail -n 80 /run/ai-workstation-cli/app/app.log' >&2 || true
 
         rm -f "$APP_PID_FILE"
         return 1
@@ -749,7 +749,7 @@ cmd_app_logs() {
         die "Workstation is not running."
 
     docker exec ai-workstation-cli \
-        sh -lc 'tail -n 100 -f /run/ai-workstation-cli/app/app.log'
+        sh -c 'tail -n 100 -f /run/ai-workstation-cli/app/app.log'
 }
 
 cmd_status() {
