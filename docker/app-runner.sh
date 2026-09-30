@@ -17,6 +17,8 @@ fi
 mkdir -p "$APP_DIR" 2>/dev/null || true
 rm -f "$PID_FILE" "$PGID_FILE"
 export PATH="/home/sandbox/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin:${PATH:-}"
+export HOST="${HOST:-0.0.0.0}"
+export HOSTNAME="${HOSTNAME:-0.0.0.0}"
 cd /workspace || exit 1
 
 # Normalize arguments: if single string, wrap in bash -c; if bash -lc / sh -lc, strip -l

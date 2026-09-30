@@ -595,14 +595,12 @@ cmd_run() {
 
     local command
     case "$manager" in
-        npm)  command='npm run dev' ;;
-        pnpm) command='pnpm dev' ;;
-        yarn) command='yarn dev' ;;
-        bun)  command='bun run dev' ;;
+        npm)  command="npm run dev${host_args:+ -- $host_args}" ;;
+        pnpm) command="pnpm dev${host_args:+ $host_args}" ;;
+        yarn) command="yarn dev${host_args:+ $host_args}" ;;
+        bun)  command="bun run dev${host_args:+ $host_args}" ;;
         *) die "Unsupported package manager: $manager" ;;
     esac
-
-    [[ -n "$host_args" ]] && command="$command -- $host_args"
 
     mkdir -p "$APP_RUNTIME_DIR"
     chmod 775 "$APP_RUNTIME_DIR"
