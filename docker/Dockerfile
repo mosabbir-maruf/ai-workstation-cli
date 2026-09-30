@@ -19,7 +19,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable \
-    && npm install --prefix /usr/local -g pnpm yarn \
+    && npm install --prefix /usr/local -g --force pnpm \
+    && rm -rf /root/.npm \
     && echo 'export PATH="/home/sandbox/.npm-global/bin:$PATH"' > /etc/profile.d/npm-global.sh \
     && chmod 0644 /etc/profile.d/npm-global.sh
 
