@@ -1479,6 +1479,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
                 elif provider == "openrouter":
                     models = [
+                        "openrouter/free",
                         "deepseek/deepseek-r1:free",
                         "deepseek/deepseek-chat:free",
                         "meta-llama/llama-3.3-70b-instruct:free",
