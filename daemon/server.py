@@ -1000,12 +1000,29 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 name = ""
                 email = ""
                 if active_proj_path and Path(active_proj_path).is_dir():
-                    _, name = await run_cmd_async(["git", "-C", active_proj_path, "config", "user.name"], timeout=5.0)
-                    _, email = await run_cmd_async(["git", "-C", active_proj_path, "config", "user.email"], timeout=5.0)
-                if not name.strip():
-                    _, name = await run_cmd_async(["git", "config", "--global", "user.name"], timeout=5.0)
-                if not email.strip():
-                    _, email = await run_cmd_async(["git", "config", "--global", "user.email"], timeout=5.0)
+                    res_name, res_email = await asyncio.gather(
+                        run_cmd_async(["git", "-C", active_proj_path, "config", "user.name"], timeout=5.0),
+                        run_cmd_async(["git", "-C", active_proj_path, "config", "user.email"], timeout=5.0),
+                    )
+                    name = res_name[1].strip()
+                    email = res_email[1].strip()
+
+                if not name or not email:
+                    tasks = []
+                    need_name = not name
+                    need_email = not email
+                    if need_name:
+                        tasks.append(run_cmd_async(["git", "config", "--global", "user.name"], timeout=5.0))
+                    if need_email:
+                        tasks.append(run_cmd_async(["git", "config", "--global", "user.email"], timeout=5.0))
+                    if tasks:
+                        results = await asyncio.gather(*tasks)
+                        idx = 0
+                        if need_name:
+                            name = results[idx][1].strip()
+                            idx += 1
+                        if need_email:
+                            email = results[idx][1].strip()
 
                 name = name.strip()
                 email = email.strip()
@@ -1043,8 +1060,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             ["git", "-C", active_proj_path, "config", "user.name", name],
                             ["git", "-C", active_proj_path, "config", "user.email", email],
                         ])
-                    for c in cmds:
-                        await run_cmd_async(c, timeout=5.0)
+                    await asyncio.gather(*(run_cmd_async(c, timeout=5.0) for c in cmds))
                     invalidate_cache()
                     resp_data = {
                         "ok": True,
