@@ -371,6 +371,14 @@ cmd_harness_restart() {
     harness_exec restart
 }
 
+cmd_harness_sync() {
+    docker ps --format '{{.Names}}' |
+        grep -qx ai-workstation-cli ||
+        die "Workstation is not running."
+
+    harness_exec sync
+}
+
 cmd_harness_status() {
     docker ps --format '{{.Names}}' |
         grep -qx ai-workstation-cli ||
@@ -1915,7 +1923,7 @@ ${_C_BOLD}Runtime & App:${_C_RESET}
   ai preview                Show local and Cloudflare Tunnel URLs for active ports
 
 ${_C_BOLD}DSH Agent Harness:${_C_RESET}
-  ai harness {start|stop|restart|status}
+  ai harness {start|stop|restart|status|sync}
   ai dsh update [version]   Update @deepseek-ai/dsh inside persistent volume
   ai dsh version            Print active DSH version
 
@@ -1958,8 +1966,11 @@ case "${1:-}" in
             status)
                 cmd_harness_status
                 ;;
+            sync)
+                cmd_harness_sync
+                ;;
             *)
-                die "Usage: ai harness {start|stop|restart|status}"
+                die "Usage: ai harness {start|stop|restart|status|sync}"
                 ;;
         esac
         ;;

@@ -50,21 +50,62 @@ cleanup_stale_state() {
 }
 
 sync_dsh_config() {
-    node -e '
+    NODE_PATH="/home/sandbox/.npm-global/node_modules:${NODE_PATH:-}" node -e '
         const fs = require("fs");
+        const path = require("path");
+
+        let YAML;
+        try {
+            YAML = require("yaml");
+        } catch {
+            try {
+                YAML = require("/home/sandbox/.npm-global/node_modules/yaml");
+            } catch (e) {
+                console.error("FATAL: Failed to load yaml module:", e);
+                process.exit(1);
+            }
+        }
+
         const dshDir = "/home/sandbox/.dsh";
-        const uiFile = dshDir + "/ui-providers.json";
-        const credFile = dshDir + "/.credentials.yaml";
-        const setFile = dshDir + "/settings.yaml";
+        const uiFile = path.join(dshDir, "ui-providers.json");
+        const credFile = path.join(dshDir, ".credentials.yaml");
+        const setFile = path.join(dshDir, "settings.yaml");
+        const importedSetFile = path.join(dshDir, "settings.yaml.imported");
+        const profileDir = path.join(dshDir, "profiles", "web");
+        const profilePatchFile = path.join(profileDir, "cordis.patch.yml");
+        const rootPatchFile = path.join(dshDir, "cordis.patch.yml");
 
         if (!fs.existsSync(uiFile)) process.exit(0);
         let ui = {};
-        try { ui = JSON.parse(fs.readFileSync(uiFile, "utf8")); } catch { process.exit(0); }
+        try {
+            ui = JSON.parse(fs.readFileSync(uiFile, "utf8"));
+        } catch (e) {
+            console.error("ERROR: Failed to parse ui-providers.json:", e);
+            process.exit(1);
+        }
         const provs = (ui && typeof ui.api_providers === "object" && ui.api_providers) || {};
+
+        function extractCleanHeaders(rawHeaders) {
+            if (!rawHeaders || typeof rawHeaders !== "object" || Array.isArray(rawHeaders)) {
+                return undefined;
+            }
+            const cleanEntries = Object.entries(rawHeaders)
+                .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string" && v.trim())
+                .map(([k, v]) => [k.trim(), v.trim()]);
+            return cleanEntries.length > 0 ? Object.fromEntries(cleanEntries) : undefined;
+        }
+
+        function extractCompat(rawCompat) {
+            if (rawCompat && typeof rawCompat === "object" && !Array.isArray(rawCompat) && Object.keys(rawCompat).length > 0) {
+                return rawCompat;
+            }
+            return undefined;
+        }
 
         const refs = {};
         const piProviders = {};
         let defaultRoute = null;
+        const processedKeys = new Set(["google"]);
 
         const map = [
             { uiKey: "deepseek", env: "DEEPSEEK_API_KEY", piKey: null, name: "DeepSeek", defModel: "deepseek-chat" },
@@ -77,24 +118,13 @@ sync_dsh_config() {
         ];
 
         for (const m of map) {
+            processedKeys.add(m.uiKey);
             const entry = provs[m.uiKey] || (m.uiKey === "gemini" ? provs.google : null) || {};
-            const key = String(entry.api_key || "").trim();
+            const key = String(entry.api_key || entry.apiKey || "").trim();
             const model = String(entry.model || "").trim() || m.defModel;
-            const baseUrl = String(entry.base_url || "").trim();
-
-            const rawHeaders = entry.headers && typeof entry.headers === "object" && !Array.isArray(entry.headers) ? entry.headers : null;
-            let cleanHeaders = undefined;
-            if (rawHeaders) {
-                const cleanEntries = Object.entries(rawHeaders)
-                    .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string" && v.trim())
-                    .map(([k, v]) => [k.trim(), v.trim()]);
-                if (cleanEntries.length > 0) {
-                    cleanHeaders = Object.fromEntries(cleanEntries);
-                }
-            }
-            const compat = entry.compat && typeof entry.compat === "object" && !Array.isArray(entry.compat) && Object.keys(entry.compat).length > 0
-                ? entry.compat
-                : undefined;
+            const baseUrl = String(entry.base_url || entry.baseUrl || "").trim();
+            const cleanHeaders = extractCleanHeaders(entry.headers);
+            const compat = extractCompat(entry.compat);
 
             if (key) {
                 refs[m.env] = key;
@@ -131,20 +161,100 @@ sync_dsh_config() {
             }
         }
 
-        const patchFile = dshDir + "/cordis.patch.yml";
+        // Generic / raw custom providers not in predefined map
+        for (const [k, v] of Object.entries(provs)) {
+            if (processedKeys.has(k) || !v || typeof v !== "object") continue;
+            const key = String(v.api_key || v.apiKey || "").trim();
+            const model = String(v.model || "").trim() || "default";
+            const baseUrl = String(v.base_url || v.baseUrl || "").trim();
+            const cleanHeaders = extractCleanHeaders(v.headers);
+            const compat = extractCompat(v.compat);
+
+            if (key || baseUrl) {
+                const envVar = k.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY";
+                if (key) refs[envVar] = key;
+                const modelIds = model.split(",").map((s) => s.trim()).filter(Boolean);
+                const modelList = (modelIds.length ? modelIds : ["default"]).map((id) => ({ id, name: id }));
+                if (!defaultRoute) {
+                    defaultRoute = { provider: k, model: modelList[0].id };
+                }
+                piProviders[k] = {
+                    displayName: String(v.name || k),
+                    ...(key ? { apiKeyEnv: envVar } : {}),
+                    api: String(v.api || "openai-completions"),
+                    baseURL: baseUrl || "http://127.0.0.1:11434/v1",
+                    models: modelList,
+                    ...(cleanHeaders ? { headers: cleanHeaders } : {}),
+                    ...(compat ? { compat } : {}),
+                };
+            }
+        }
+
+        // 1. Root cordis.patch.yml (deepseek toggle)
         const hasDeepseek = Boolean(refs["DEEPSEEK_API_KEY"]);
-        const patchYaml = hasDeepseek
+        const rootPatchYaml = hasDeepseek
             ? "- id: llm-deepseek\n  disabled: false\n"
             : "- id: llm-deepseek\n  disabled: true\n- id: llm-deepseek-account\n  disabled: true\n";
-        fs.writeFileSync(patchFile, patchYaml, { mode: 0o600 });
+        fs.writeFileSync(rootPatchFile, rootPatchYaml, { mode: 0o600 });
 
-        fs.writeFileSync(credFile, JSON.stringify({ version: 1, refs }, null, 2) + "\n", { mode: 0o600 });
+        // 2. .credentials.yaml (preserve records/browser-session grants)
+        let credData = { version: 1 };
+        if (fs.existsSync(credFile)) {
+            try {
+                const parsedCred = YAML.parse(fs.readFileSync(credFile, "utf8"));
+                if (parsedCred && typeof parsedCred === "object") credData = parsedCred;
+            } catch {}
+        }
+        credData.version = 1;
+        credData.refs = refs;
+        fs.writeFileSync(credFile, YAML.stringify(credData), { mode: 0o600 });
         try { fs.chmodSync(credFile, 0o600); } catch {}
+
+        // 3. Web profile cordis.patch.yml (authoritative row replacement)
+        fs.mkdirSync(profileDir, { recursive: true });
+        let remainingEntries = [];
+        if (fs.existsSync(profilePatchFile)) {
+            try {
+                const existingPatch = YAML.parse(fs.readFileSync(profilePatchFile, "utf8"));
+                if (Array.isArray(existingPatch)) {
+                    remainingEntries = existingPatch.filter((item) =>
+                        item && item.id !== "llm-pi-ai" && item.id !== "agent-default-model"
+                    );
+                }
+            } catch {}
+        }
+
+        const newEntries = [];
+        if (defaultRoute) {
+            newEntries.push({
+                id: "agent-default-model",
+                name: "@deepseek-ai/dsh-agent-default-model",
+                config: defaultRoute,
+            });
+        }
+        if (Object.keys(piProviders).length > 0) {
+            newEntries.push({
+                id: "llm-pi-ai",
+                name: "@deepseek-ai/dsh-llm-pi-ai",
+                config: {
+                    providers: piProviders,
+                },
+            });
+        }
+
+        const finalPatch = [...remainingEntries, ...newEntries];
+        fs.writeFileSync(profilePatchFile, YAML.stringify(finalPatch), { mode: 0o600 });
+        try { fs.chmodSync(profilePatchFile, 0o600); } catch {}
+
+        // 4. settings.yaml & unlink settings.yaml.imported
+        try {
+            if (fs.existsSync(importedSetFile)) fs.unlinkSync(importedSetFile);
+        } catch {}
 
         let settingsDoc = {};
         if (fs.existsSync(setFile)) {
             try {
-                const raw = JSON.parse(fs.readFileSync(setFile, "utf8"));
+                const raw = YAML.parse(fs.readFileSync(setFile, "utf8"));
                 if (raw && typeof raw === "object" && !Array.isArray(raw)) settingsDoc = raw;
             } catch {}
         }
@@ -152,14 +262,17 @@ sync_dsh_config() {
         settingsDoc["llm-pi-ai"] = { providers: piProviders };
         if (defaultRoute) {
             settingsDoc["agent-default-model"] = defaultRoute;
+        } else {
+            delete settingsDoc["agent-default-model"];
         }
-        fs.writeFileSync(setFile, JSON.stringify(settingsDoc, null, 2) + "\n", { mode: 0o600 });
+        fs.writeFileSync(setFile, YAML.stringify(settingsDoc), { mode: 0o600 });
         try { fs.chmodSync(setFile, 0o600); } catch {}
 
+        // 5. Output environment exports for start_dsh
         for (const [k, v] of Object.entries(refs)) {
             console.log("export " + k + "=" + JSON.stringify(v));
         }
-    ' 2>/dev/null || true
+    '
 }
 
 start_dsh() {
@@ -186,6 +299,9 @@ start_dsh() {
     if [[ -f "$hmr_file" ]] && grep -q 'if (hmr === void 0) throw' "$hmr_file" 2>/dev/null; then
         sed -i 's/if (hmr === void 0) throw/if (hmr === void 0) return; \/\/ throw/g' "$hmr_file" 2>/dev/null || true
     fi
+
+    # Clean any stale provider API keys from environment
+    unset DEEPSEEK_API_KEY GEMINI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY GROQ_API_KEY CUSTOM_API_KEY 2>/dev/null || true
 
     local env_exports=""
     env_exports="$(sync_dsh_config)"

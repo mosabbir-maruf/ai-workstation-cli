@@ -589,6 +589,56 @@ def _compute_fast_overview() -> dict:
     return data
 
 
+def normalize_provider_entry(entry: dict) -> dict:
+    if not isinstance(entry, dict):
+        return {}
+    norm = {}
+
+    key = str(entry.get("api_key") or entry.get("apiKey") or "").strip()
+    if key:
+        norm["api_key"] = key
+
+    model = str(entry.get("model") or "").strip()
+    if model:
+        norm["model"] = model
+
+    base_url = str(entry.get("base_url") or entry.get("baseUrl") or "").strip()
+    if base_url:
+        norm["base_url"] = base_url
+
+    headers = entry.get("headers")
+    if isinstance(headers, dict):
+        clean_h = {
+            str(k).strip(): str(v).strip()
+            for k, v in headers.items()
+            if str(k).strip() and str(v).strip()
+        }
+        if clean_h:
+            norm["headers"] = clean_h
+
+    compat = entry.get("compat")
+    if isinstance(compat, dict) and compat:
+        norm["compat"] = compat
+
+    return norm
+
+
+def normalize_providers_dict(raw_data) -> dict:
+    if not isinstance(raw_data, dict):
+        return {}
+    provs = raw_data.get("api_providers")
+    if not isinstance(provs, dict):
+        return {}
+    normalized = {}
+    for prov_id, entry in provs.items():
+        if isinstance(entry, dict):
+            norm_entry = normalize_provider_entry(entry)
+            if norm_entry:
+                norm_id = "gemini" if prov_id == "google" else str(prov_id).strip()
+                normalized[norm_id] = norm_entry
+    return normalized
+
+
 # Request Router
 async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     try:
@@ -1131,23 +1181,88 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             elif method == "POST":
                 new_content = parsed_json.get("content", "")
                 try:
-                    DSH_DIR.mkdir(parents=True, exist_ok=True)
-                    DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
-                    DSH_UI_PROVIDERS_FILE.chmod(0o644)
-                    overview = await get_fast_overview_async()
-                    if overview["workstation"]["running"]:
-                        await run_cmd_async(
-                            ["docker", "exec", "ai-workstation-cli", "/usr/local/bin/harness.sh", "sync"],
-                            timeout=5.0,
-                        )
-                    invalidate_cache()
-                    resp_data = {
-                        "ok": True,
-                        "output": "Provider keys saved to vault and live-synced into DSH (.credentials.yaml & settings.yaml).",
-                    }
+                    new_data = json.loads(new_content) if new_content.strip() else {"api_providers": {}}
+                    if not isinstance(new_data, dict):
+                        raise ValueError("Settings content must be a JSON object.")
                 except Exception as e:
-                    status_code = 500
-                    resp_data = {"ok": False, "output": f"Failed to save settings: {e}"}
+                    status_code = 400
+                    resp_data = {"ok": False, "restarted": False, "output": f"Invalid JSON payload: {e}"}
+                else:
+                    try:
+                        current_data = {}
+                        target_file = DSH_UI_PROVIDERS_FILE if DSH_UI_PROVIDERS_FILE.is_file() else DSH_SETTINGS_FILE
+                        old_content = ""
+                        if target_file.is_file():
+                            try:
+                                old_content = target_file.read_text(encoding="utf-8")
+                                current_data = json.loads(old_content)
+                            except Exception:
+                                current_data = {}
+
+                        incoming_norm = normalize_providers_dict(new_data)
+                        current_norm = normalize_providers_dict(current_data)
+                        has_changed = (incoming_norm != current_norm)
+
+                        DSH_DIR.mkdir(parents=True, exist_ok=True)
+                        DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
+                        DSH_UI_PROVIDERS_FILE.chmod(0o644)
+
+                        overview = await get_fast_overview_async()
+                        container_running = overview["workstation"]["running"]
+
+                        if not container_running:
+                            resp_data = {
+                                "ok": True,
+                                "restarted": False,
+                                "output": "Provider configuration saved to vault (workstation container is not running).",
+                            }
+                        elif not has_changed:
+                            resp_data = {
+                                "ok": True,
+                                "restarted": False,
+                                "output": "Provider configuration is unchanged (no restart needed).",
+                            }
+                        else:
+                            ok_sync, out_sync = await run_cmd_async(
+                                ["ai", "harness", "sync"],
+                                timeout=10.0,
+                            )
+                            if not ok_sync:
+                                if old_content:
+                                    DSH_UI_PROVIDERS_FILE.write_text(old_content, encoding="utf-8")
+                                status_code = 500
+                                resp_data = {
+                                    "ok": False,
+                                    "restarted": False,
+                                    "output": f"Configuration sync failed inside container:\n{out_sync}",
+                                }
+                            else:
+                                ok_restart, out_restart = await run_cmd_async(
+                                    ["ai", "harness", "restart"],
+                                    timeout=30.0,
+                                )
+                                if not ok_restart:
+                                    status_code = 500
+                                    resp_data = {
+                                        "ok": False,
+                                        "restarted": False,
+                                        "output": f"Configuration synced, but DSH restart failed:\n{out_restart}",
+                                    }
+                                else:
+                                    deleted_keys = set(current_norm.keys()) - set(incoming_norm.keys())
+                                    if deleted_keys:
+                                        msg = f"Provider ({', '.join(sorted(deleted_keys))}) removed and DSH restarted successfully."
+                                    else:
+                                        msg = "Provider configuration saved and DSH restarted successfully."
+                                    resp_data = {
+                                        "ok": True,
+                                        "restarted": True,
+                                        "output": msg,
+                                    }
+                        invalidate_cache()
+                    except Exception as e:
+                        status_code = 500
+                        resp_data = {"ok": False, "restarted": False, "output": f"Failed to save settings: {e}"}
 
         # 9. Preview & Anywhere URLs
         elif clean_path == "/api/preview":
