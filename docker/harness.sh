@@ -82,6 +82,20 @@ sync_dsh_config() {
             const model = String(entry.model || "").trim() || m.defModel;
             const baseUrl = String(entry.base_url || "").trim();
 
+            const rawHeaders = entry.headers && typeof entry.headers === "object" && !Array.isArray(entry.headers) ? entry.headers : null;
+            let cleanHeaders = undefined;
+            if (rawHeaders) {
+                const cleanEntries = Object.entries(rawHeaders)
+                    .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string" && v.trim())
+                    .map(([k, v]) => [k.trim(), v.trim()]);
+                if (cleanEntries.length > 0) {
+                    cleanHeaders = Object.fromEntries(cleanEntries);
+                }
+            }
+            const compat = entry.compat && typeof entry.compat === "object" && !Array.isArray(entry.compat) && Object.keys(entry.compat).length > 0
+                ? entry.compat
+                : undefined;
+
             if (key) {
                 refs[m.env] = key;
                 if (m.uiKey === "gemini") refs["GOOGLE_GENERATIVE_AI_API_KEY"] = key;
@@ -103,11 +117,15 @@ sync_dsh_config() {
                             api: "openai-completions",
                             baseURL: baseUrl || "http://127.0.0.1:11434/v1",
                             models: modelList,
+                            ...(cleanHeaders ? { headers: cleanHeaders } : {}),
+                            ...(compat ? { compat } : {}),
                         }
                         : {
                             displayName: m.name,
                             apiKeyEnv: m.env,
                             models: modelList,
+                            ...(cleanHeaders ? { headers: cleanHeaders } : {}),
+                            ...(compat ? { compat } : {}),
                         };
                 }
             }

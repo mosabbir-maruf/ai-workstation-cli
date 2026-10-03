@@ -1394,6 +1394,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             provider = parsed_json.get("provider", "custom")
             api_key = parsed_json.get("apiKey", "").strip()
             base_url = parsed_json.get("baseUrl", "").strip()
+            req_headers = parsed_json.get("headers")
             models = []
             error_msg = ""
 
@@ -1409,7 +1410,22 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         f"{normalized.replace('/v1', '')}/api/tags",
                     ]
 
-                    headers = {"Accept": "application/json"}
+                    headers = {"Accept": "application/json", "User-Agent": "ai-workstation/1.0"}
+                    if isinstance(req_headers, dict):
+                        for hk, hv in req_headers.items():
+                            if isinstance(hk, str) and isinstance(hv, str) and hk.strip() and hv.strip():
+                                headers[hk.strip()] = hv.strip()
+                    elif provider == "custom" and DSH_UI_PROVIDERS_FILE.is_file():
+                        try:
+                            ui_data = json.loads(DSH_UI_PROVIDERS_FILE.read_text(encoding="utf-8"))
+                            saved_headers = ui_data.get("api_providers", {}).get("custom", {}).get("headers")
+                            if isinstance(saved_headers, dict):
+                                for hk, hv in saved_headers.items():
+                                    if isinstance(hk, str) and isinstance(hv, str) and hk.strip() and hv.strip():
+                                        headers[hk.strip()] = hv.strip()
+                        except Exception:
+                            pass
+
                     if api_key:
                         headers["Authorization"] = f"Bearer {api_key}"
 
