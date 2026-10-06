@@ -38,6 +38,14 @@ print_header() {
     echo -e "\033[36m│\033[0m \033[1m${text}\033[0m \033[36m│\033[0m"
     echo -e "\033[36m╰${border}╯\033[0m"
 }
+prompt_return() {
+    echo
+    echo -e "[90m[[36m Enter [90m] Return to menu[0m[K"
+    tput civis
+    read -r -s
+    tput cnorm
+}
+
 export -f print_header
 
 log_info() {
@@ -1803,7 +1811,7 @@ cmd_setup() {
     else
         s1_prompt+="\033[90mCurrent status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}\033[0m"
     fi
-    local s1_opts=("Auto-generate a secure 32-byte API key (Recommended)" "Enter a custom API key" "Skip this step" "Back to Main Menu")
+    local s1_opts=("Auto-generate a secure 32-byte API key (Recommended)" "Enter a custom API key" "Skip this step")
     local s1_choice=2
     render_menu "$s1_prompt" "${s1_opts[@]}" || s1_choice=$?
     
@@ -1833,9 +1841,6 @@ cmd_setup() {
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 1: Skipped\033[0m")
             ;;
-        3)
-            return 0
-            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1848,7 +1853,7 @@ cmd_setup() {
     else
         s2_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured${_C_RESET}\033[0m"
     fi
-    local s2_opts=("Configure GitHub App (App ID, Installation ID, .pem key)" "Skip this step (run 'aiws github setup' anytime later)" "Back to Main Menu")
+    local s2_opts=("Configure GitHub App (App ID, Installation ID, .pem key)" "Skip this step (run 'aiws github setup' anytime later)")
     local s2_choice=1
     render_menu "$s2_prompt" "${s2_opts[@]}" || s2_choice=$?
 
@@ -1868,9 +1873,6 @@ cmd_setup() {
         1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 2: Skipped\033[0m")
             ;;
-        2)
-            return 0
-            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1883,7 +1885,7 @@ cmd_setup() {
     else
         s3_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured (local access only)${_C_RESET}\033[0m"
     fi
-    local s3_opts=("Configure Cloudflare Tunnel token & hostnames" "Skip this step (run 'aiws tunnel setup' anytime later)" "Back to Main Menu")
+    local s3_opts=("Configure Cloudflare Tunnel token & hostnames" "Skip this step (run 'aiws tunnel setup' anytime later)")
     local s3_choice=1
     render_menu "$s3_prompt" "${s3_opts[@]}" || s3_choice=$?
 
@@ -1908,9 +1910,6 @@ cmd_setup() {
         1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 3: Skipped\033[0m")
             ;;
-        2)
-            return 0
-            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1923,7 +1922,7 @@ cmd_setup() {
     else
         s4_prompt+="\033[90mCurrent active project: ${_C_YELLOW}None${_C_RESET}\033[0m"
     fi
-    local s4_opts=("Clone a GitHub repository URL and activate it" "Select an existing project from ~/projects" "Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)" "Back to Main Menu")
+    local s4_opts=("Clone a GitHub repository URL and activate it" "Select an existing project from ~/projects" "Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)")
     local s4_choice=2
     render_menu "$s4_prompt" "${s4_opts[@]}" || s4_choice=$?
 
@@ -1972,9 +1971,6 @@ cmd_setup() {
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 4: Skipped\033[0m")
             ;;
-        3)
-            return 0
-            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1982,7 +1978,7 @@ cmd_setup() {
     # ------------------------------------------------------------------
     print_setup_header
     local s5_prompt="\033[1m[Step 5/5] Finalize & Boot Environment\033[0m\n\033[90mStart the workspace container and host daemon to complete the onboarding.\033[0m\n"
-    local s5_opts=("Yes, start AIWS and run system checks (Recommended)" "Start AIWS silently in the background" "Skip this step (run 'aiws start' manually later)" "Back to Main Menu")
+    local s5_opts=("Yes, start AIWS and run system checks (Recommended)" "Start AIWS silently in the background" "Skip this step (run 'aiws start' manually later)")
     local s5_choice=0
     render_menu "$s5_prompt" "${s5_opts[@]}" || s5_choice=$?
 
@@ -2005,9 +2001,6 @@ cmd_setup() {
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
             ;;
-        3)
-            return 0
-            ;;
     esac
 
     tput cnorm
@@ -2016,8 +2009,8 @@ cmd_setup() {
     echo -e "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
     echo -e "${_C_CYAN}│${_C_RESET} ${_C_BOLD}AIWS CLI Onboarding Flow Complete${_C_RESET}                                ${_C_CYAN}│${_C_RESET}"
     echo -e "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
-    echo -e "\033[90mYour workstation is configured and ready. Returning to main menu...\033[0m"
-    sleep 2
+    echo -e "\033[90mYour workstation is configured and ready.\033[0m"
+    prompt_return
 }
 
 
@@ -2176,7 +2169,7 @@ cmd_edit_configs() {
                         cmd_daemon restart >/dev/null 2>&1 || true
                         echo -e "
 [32m✓ API Key Generated and Saved: ${gen_key}[0m"
-                        sleep 2
+                        prompt_return
                         ;;
                     2)
                         local custom_key
@@ -2191,7 +2184,7 @@ cmd_edit_configs() {
                             echo -e "
 [33mNo input. Aborted.[0m"
                         fi
-                        sleep 2
+                        prompt_return
                         ;;
                     *) ;;
                 esac
@@ -2357,11 +2350,7 @@ cmd_tui() {
         esac
         # Don't prompt to return for interactive sub-menus (5, 6)
         if [[ "$choice" -ne 10 && "$choice" -ne 5 && "$choice" -ne 6 ]]; then
-            echo
-            echo -e "\033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
-            tput civis
-            read -r -s
-            tput cnorm
+            prompt_return
         fi
     done
 }
