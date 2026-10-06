@@ -40,7 +40,7 @@ print_header() {
 }
 prompt_return() {
     echo
-    echo -e "\033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
+    echo -e "\033[90m[\033[36m Enter \033[90m] Go Back to Menu\033[0m\033[K"
     tput civis
     read -r -s
     tput cnorm
@@ -858,7 +858,7 @@ cmd_logs() {
     echo
     print_header "WORKSTATION LOGS"
     echo -e "\033[90m[\033[36mi\033[90m]\033[0m Tailing live container logs."
-    echo -e "\033[90m[\033[36mi\033[90m]\033[0m \033[1mPress Ctrl+C\033[0m to stop streaming and return to menu."
+    echo -e "\033[90m[\033[36mi\033[90m]\033[0m \033[1mPress Ctrl+C\033[0m to stop streaming and go back to menu."
     echo
     trap ' ' INT
     compose logs -f --tail=100 || true
@@ -870,7 +870,7 @@ cmd_shell() {
     echo
     print_header "INTERACTIVE SHELL"
     echo -e "\033[90m[\033[36mi\033[90m]\033[0m You are entering the isolated AIWS container environment."
-    echo -e "\033[90m[\033[36mi\033[90m]\033[0m \033[1mType 'exit' or press Ctrl+D\033[0m to close the shell and return to menu."
+    echo -e "\033[90m[\033[36mi\033[90m]\033[0m \033[1mType 'exit' or press Ctrl+D\033[0m to close the shell and go back to menu."
     echo
     trap ' ' INT
     docker exec -it aiws-cli bash || true
