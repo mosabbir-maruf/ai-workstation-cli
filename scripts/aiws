@@ -2021,16 +2021,16 @@ render_menu() {
 
     while true; do
         tput rc
-        echo -e "\n  \033[1m$prompt\033[0m\n"
+        echo -e "\n\033[1m$prompt\033[0m\n"
         for i in "${!options[@]}"; do
             if [[ "$i" -eq "$selected" ]]; then
                 echo -e "\033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
             else
-                echo -e "      ${options[$i]}\033[K"
+                echo -e "  ${options[$i]}\033[K"
             fi
         done
 
-        echo -e "\n  \033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m q \033[90m] Quit\033[0m\033[K"
+        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m q \033[90m] Quit\033[0m\033[K"
 
         read -rsn1 key || true
         if [[ "$key" == $'\x1b' ]]; then
