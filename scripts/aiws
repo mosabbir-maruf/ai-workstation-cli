@@ -2227,11 +2227,13 @@ cmd_tui() {
                exit 0 
                ;;
         esac
-        
-        if [[ "$choice" -ne 10 ]]; then
+        # Don't prompt to return for interactive sub-menus (5, 6)
+        if [[ "$choice" -ne 10 && "$choice" -ne 5 && "$choice" -ne 6 ]]; then
             echo
             echo -e "\033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
+            tput civis
             read -r -s
+            tput cnorm
         fi
     done
 }
