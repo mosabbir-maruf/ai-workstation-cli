@@ -2108,6 +2108,7 @@ cmd_edit_configs() {
             "Edit GitHub App Integration"
             "Edit Cloudflare Tunnel"
             "Edit Workspace Project"
+            "Open Raw .env Configuration"
             "Back to Main Menu"
         )
         local choice=0
@@ -2221,6 +2222,10 @@ Press any key to return..."
                 esac
                 ;;
             4)
+                ${EDITOR:-nano} "$ENV_FILE"
+                load_env 2>/dev/null || true
+                ;;
+            5)
                 break
                 ;;
         esac
