@@ -2033,7 +2033,7 @@ render_menu() {
             fi
         done
 
-        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m q \033[90m] Quit\033[0m\033[K"
+        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m h \033[90m] Help    [\033[36m q \033[90m] Quit\033[0m\033[K"
 
         read -rsn1 key || true
         if [[ "$key" == $'\x1b' ]]; then
@@ -2051,6 +2051,19 @@ render_menu() {
         elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
             selected=$((selected + 1))
             [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
+        elif [[ "$key" == "h" || "$key" == "H" ]]; then
+            tput cnorm
+            tput rc
+            tput ed
+            clear
+            print_header "HELP & CLI USAGE"
+            print_usage_text
+            echo -e -n "\n\033[90m[\033[36m Enter \033[90m] Return to menu...\033[0m"
+            read -r || true
+            clear
+            print_aiws_banner
+            tput civis
+            tput sc
         elif [[ "$key" == "q" || "$key" == "Q" ]]; then
             tput cnorm
             tput rc
