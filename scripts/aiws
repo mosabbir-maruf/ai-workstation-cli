@@ -1109,6 +1109,14 @@ cmd_upgrade() {
     cmd_harness_start
 }
 
+cmd_uninstall() {
+    if [[ -f "$ROOT/uninstall.sh" ]]; then
+        bash "$ROOT/uninstall.sh" "$@"
+    else
+        die "uninstall.sh not found."
+    fi
+}
+
 cmd_doctor() {
     echo "=== AIWS Doctor ==="
     echo
@@ -2018,6 +2026,7 @@ cmd_tui() {
             "🛠  Setup & Configuration"
             "☁️  Cloud & Git Integrations"
             "🔄 Update AIWS CLI"
+            "🗑️  Uninstall AIWS"
             "❌ Exit"
         )
         
@@ -2050,10 +2059,11 @@ cmd_tui() {
                fi
                ;;
             7) cmd_update ;;
-            8) echo "Goodbye!"; exit 0 ;;
+            8) cmd_uninstall ;;
+            9) echo "Goodbye!"; exit 0 ;;
         esac
         
-        if [[ "$choice" -ne 8 ]]; then
+        if [[ "$choice" -ne 9 ]]; then
             echo
             read -r -p "Press Enter to return to menu..."
         fi
@@ -2156,6 +2166,7 @@ case "${1:-}" in
         ;;
     update) cmd_update ;;
     upgrade) cmd_upgrade ;;
+    uninstall) shift; cmd_uninstall "$@" ;;
     doctor) cmd_doctor ;;
     github)
         shift
