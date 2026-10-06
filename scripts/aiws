@@ -2006,6 +2006,119 @@ cmd_setup() {
 }
 
 
+print_usage_text() {
+    echo
+    echo -e "[1m  [ ONBOARDING & SETUP ][0m"
+    echo -e "  [36m❯[0m aiws [36msetup[0m                    [90mLaunch interactive setup wizard[0m"
+    echo -e "  [36m❯[0m aiws [36mdoctor[0m                   [90mRun full host & container diagnostics[0m"
+    echo
+    echo -e "[1m  [ PROJECTS ][0m"
+    echo -e "  [36m❯[0m aiws [36madd[0m <url>                [90mClone a GitHub repo to ~/projects[0m"
+    echo -e "  [36m❯[0m aiws [36muse[0m <project>            [90mSet active project & mount to /workspace[0m"
+    echo -e "  [36m❯[0m aiws [36mlist[0m                     [90mList all cloned projects[0m"
+    echo -e "  [36m❯[0m aiws [36mremove[0m <project>         [90mRemove a project from ~/projects[0m"
+    echo
+    echo -e "[1m  [ GIT (ZERO-PAT) ][0m"
+    echo -e "  [36m❯[0m aiws [36mdiff[0m                     [90mShow working tree status & diff[0m"
+    echo -e "  [36m❯[0m aiws [36mpull[0m                     [90mPull latest changes[0m"
+    echo -e "  [36m❯[0m aiws [36mpush[0m \"<message>\"         [90mStage, commit, and push[0m"
+    echo
+    echo -e "[1m  [ RUNTIME & APP ][0m"
+    echo -e "  [36m❯[0m aiws [36mstart[0m | [36mstop[0m | [36mrestart[0m   [90mManage container runtime[0m"
+    echo -e "  [36m❯[0m aiws [36mstatus[0m | [36mlogs[0m | [36mshell[0m    [90mInspect state, logs, or open bash[0m"
+    echo -e "  [36m❯[0m aiws [36mrun[0m                      [90mAuto-detect & start dev server[0m"
+    echo -e "  [36m❯[0m aiws [36mapp[0m {stop|restart...}    [90mManage the internal app server[0m"
+    echo -e "  [36m❯[0m aiws [36mpreview[0m                  [90mShow local & Cloudflare URLs for ports[0m"
+    echo
+    echo -e "[1m  [ DSH AGENT HARNESS ][0m"
+    echo -e "  [36m❯[0m aiws [36mharness[0m {start...}       [90mManage the Agent Harness API[0m"
+    echo -e "  [36m❯[0m aiws [36mdsh update[0m [version]     [90mUpdate @deepseek-ai/dsh[0m"
+    echo -e "  [36m❯[0m aiws [36mdsh version[0m              [90mPrint active DSH version[0m"
+    echo
+    echo -e "[1m  [ SYSTEM & INTEGRATIONS ][0m"
+    echo -e "  [36m❯[0m aiws [36mgithub[0m | [36mtunnel[0m          [90mSetup integrations[0m"
+    echo -e "  [36m❯[0m aiws [36mdaemon[0m {start|stop...}   [90mManage host API daemon[0m"
+    echo -e "  [36m❯[0m aiws [36mstate[0m {export|import}    [90mBackup/Restore workspace[0m"
+    echo -e "  [36m❯[0m aiws [36mcache[0m clear              [90mClear persistent caches[0m"
+    echo -e "  [36m❯[0m aiws [36mupdate[0m | [36mupgrade[0m         [90mUpdate CLI and fetch latest image[0m"
+    echo
+}
+
+# --------------------------------------------------
+# Interactive TUI Menu System
+# --------------------------------------------------
+render_menu() {
+    local prompt="$1"
+    shift
+    local options=("$@")
+    local selected=0
+    local key
+
+    tput civis
+    tput sc
+
+    trap 'tput cnorm; echo; exit 1' INT
+
+    while true; do
+        tput rc
+        echo -e "\n\033[1m$prompt\033[0m\n"
+        for i in "${!options[@]}"; do
+            if [[ "$i" -eq "$selected" ]]; then
+                echo -e "  \033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
+            else
+                echo -e "    ${options[$i]}\033[K"
+            fi
+        done
+
+        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m h \033[90m] Help    [\033[36m q \033[90m] Quit\033[0m\033[K"
+
+        read -rsn1 key || true
+        if [[ "$key" == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 key || true
+            if [[ "$key" == "[A" || "$key" == "A" || "$key" == "OA" ]]; then
+                selected=$((selected - 1))
+                [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
+            elif [[ "$key" == "[B" || "$key" == "B" || "$key" == "OB" ]]; then
+                selected=$((selected + 1))
+                [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
+            fi
+        elif [[ "$key" == "k" || "$key" == "w" || "$key" == "W" || "$key" == "K" ]]; then
+            selected=$((selected - 1))
+            [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
+        elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
+            selected=$((selected + 1))
+            [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
+        elif [[ "$key" == "h" || "$key" == "H" ]]; then
+            tput cnorm
+            tput rc
+            tput ed
+            clear
+            print_header "HELP & CLI USAGE"
+            print_usage_text
+            echo -e -n "\n\033[90m[\033[36m Enter \033[90m] Return to menu...\033[0m"
+            read -r || true
+            clear
+            print_aiws_banner
+            tput civis
+            tput sc
+        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+            tput cnorm
+            tput rc
+            tput ed
+            return 255
+        elif [[ "$key" == "" ]]; then
+            break
+        fi
+    done
+
+    tput cnorm
+    tput rc
+    tput ed
+    return "$selected"
+}
+
+
+
 cmd_edit_configs() {
     while true; do
         load_env 2>/dev/null || true
