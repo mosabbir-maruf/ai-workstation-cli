@@ -1704,7 +1704,7 @@ print_aiws_banner() {
     fi
 
     local title_len=${#subtitle}
-    local pad_len=$((62 - title_len))
+    local pad_len=$((64 - title_len))
     local padding=""
     if [[ $pad_len -gt 0 ]]; then
         padding=$(printf '%*s' "$pad_len" '')
@@ -1713,11 +1713,11 @@ print_aiws_banner() {
     cat <<EOF2
 ${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮
 │  ${_C_BOLD} █████╗ ██╗██╗    ██╗███████╗     ██████╗██╗     ██╗${_C_RESET}${_C_CYAN}            │
-│  ${_C_BOLD}██╔══██╗██║██║    ██║██╔════╝    ██╔════╝██║     ██║${_C_RESET}${_C_CYAN}            │
-│  ${_C_BOLD}███████║██║██║ █╗ ██║███████╗    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
-│  ${_C_BOLD}██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
-│  ${_C_BOLD}██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║${_C_RESET}${_C_CYAN}            │
-│  ${_C_BOLD}╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝${_C_RESET}${_C_CYAN}            │
+│  ${_C_BOLD}██╔══██╗██║██║    ██║██╔════╝    ██╔════╝██║     ██║${_C_RESET}${_C_CYAN}             │
+│  ${_C_BOLD}███████║██║██║ █╗ ██║███████╗    ██║     ██║     ██║${_C_RESET}${_C_CYAN}             │
+│  ${_C_BOLD}██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║${_C_RESET}${_C_CYAN}             │
+│  ${_C_BOLD}██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║${_C_RESET}${_C_CYAN}             │
+│  ${_C_BOLD}╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝${_C_RESET}${_C_CYAN}             │
 │  ${_C_DIM}${subtitle}${_C_RESET}${_C_CYAN}${padding}│
 ╰──────────────────────────────────────────────────────────────────╯${_C_RESET}
   ${_C_BOLD}Project:${_C_RESET} $proj_badge
@@ -1980,7 +1980,7 @@ render_menu() {
             fi
         done
 
-        echo -e "\n  \033[90m[ ↑/↓ or j/k ] Navigate    [ Enter ] Select    [ q ] Quit\033[0m\033[K"
+        echo -e "\n  \033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m q \033[90m] Quit\033[0m\033[K"
 
         read -rsn1 key || true
         if [[ "$key" == $'\x1b' ]]; then
