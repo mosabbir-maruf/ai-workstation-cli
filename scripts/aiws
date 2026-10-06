@@ -1902,7 +1902,7 @@ cmd_setup() {
     case "$s2_choice" in
         0)
             tput cnorm
-            cmd_github setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
+            ( cmd_github setup ) && load_env 2>/dev/null || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
             if [[ -n "${GITHUB_APP_ID:-}" && -n "${GITHUB_INSTALLATION_ID:-}" ]]; then
                 step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mGitHub App Configured\033[0m")
             else
@@ -1935,7 +1935,7 @@ cmd_setup() {
         0)
             tput cnorm
             if [[ -f "$TUNNEL_LIB" ]]; then
-                bash "$TUNNEL_LIB" setup && load_env
+                ( bash "$TUNNEL_LIB" setup ) && load_env 2>/dev/null || true
                 if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
                     step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCloudflare Tunnel Configured\033[0m")
                 else
@@ -1974,9 +1974,12 @@ cmd_setup() {
             local repo_url
             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter GitHub URL to clone: "; read -r repo_url || true
             if [[ -n "$repo_url" ]]; then
-                cmd_add "$repo_url"
-                load_env 2>/dev/null || true
-                step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCloned & Activated Project:\033[0m ${ACTIVE_PROJECT:-$repo_url}")
+                if ( cmd_add "$repo_url" ); then
+                    load_env 2>/dev/null || true
+                    step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCloned & Activated Project:\033[0m ${ACTIVE_PROJECT:-$repo_url}")
+                else
+                    step_results+=("\033[90m[\033[31m✗\033[90m]\033[0m \033[31mFailed to clone $repo_url\033[0m")
+                fi
             else
                 step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 4: Empty URL, skipped\033[0m")
             fi
@@ -1997,9 +2000,12 @@ cmd_setup() {
                 echo -e "\n\033[1mSelect a project to set as active:\033[0m"
                 select p_name in "${existing_projects[@]}"; do
                     if [[ -n "$p_name" ]]; then
-                        cmd_use "$p_name"
-                        load_env 2>/dev/null || true
-                        step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mActivated Project:\033[0m ${p_name}")
+                        if ( cmd_use "$p_name" ); then
+                            load_env 2>/dev/null || true
+                            step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mActivated Project:\033[0m ${p_name}")
+                        else
+                            step_results+=("\033[90m[\033[31m✗\033[90m]\033[0m \033[31mFailed to activate $p_name\033[0m")
+                        fi
                         break
                     else
                         echo "Invalid selection"
@@ -2029,14 +2035,14 @@ cmd_setup() {
             tput cnorm
             step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSystem Booted & Diagnosed\033[0m")
             print_setup_header
-            cmd_start
-            cmd_doctor || true
+            ( cmd_start ) || true
+            ( cmd_doctor ) || true
             ;;
         1)
             tput cnorm
             step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSystem Booted in Background\033[0m")
             print_setup_header
-            cmd_start
+            ( cmd_start ) || true
             ;;
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
@@ -2230,12 +2236,18 @@ cmd_edit_configs() {
                 ;;
             1)
                 clear
-                cmd_github setup
+                ( cmd_github setup ) || true
+                load_env 2>/dev/null || true
                 prompt_return
                 ;;
             2)
                 clear
-                [[ -f "$TUNNEL_LIB" ]] && bash "$TUNNEL_LIB" setup || echo "Tunnel module missing."
+                if [[ -f "$TUNNEL_LIB" ]]; then
+                    ( bash "$TUNNEL_LIB" setup ) || true
+                    load_env 2>/dev/null || true
+                else
+                    echo "Tunnel module missing."
+                fi
                 prompt_return
                 ;;
             3)
@@ -2253,7 +2265,8 @@ cmd_edit_configs() {
                         echo -e -n "
 \033[90m[\033[36m?\033[90m]\033[0m Paste GitHub repository URL: "; read -r repo_url || true
                         if [[ -n "$repo_url" ]]; then
-                            cmd_add "$repo_url"
+                            ( cmd_add "$repo_url" ) || true
+                            load_env 2>/dev/null || true
                         fi
                         prompt_return
                         ;;
@@ -2272,7 +2285,8 @@ cmd_edit_configs() {
 \033[1mSelect a project to set as active:\033[0m"
                             select p_name in "${existing_projects[@]}"; do
                                 if [[ -n "$p_name" ]]; then
-                                    cmd_use "$p_name"
+                                    ( cmd_use "$p_name" ) || true
+                                    load_env 2>/dev/null || true
                                     break
                                 else
                                     echo "Invalid selection"
