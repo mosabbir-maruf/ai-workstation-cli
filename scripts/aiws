@@ -1809,7 +1809,8 @@ cmd_setup() {
     echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Auto-generate a secure 32-byte API key (Recommended)\033[0m"
     echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Enter a custom API key\033[0m"
     echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: s): "; read -r step1_choice || true
+    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: s): "; read -r step1_choice || true
 
     case "${step1_choice:-s}" in
         1)
@@ -1830,6 +1831,8 @@ cmd_setup() {
                 step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 1: Empty input, skipped\033[0m")
             fi
             ;;
+        q|Q) return 0 ;;
+
         *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 1: Skipped\033[0m")
             ;;
@@ -1850,12 +1853,15 @@ cmd_setup() {
     fi
     echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)\033[0m"
     echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws github setup' anytime later)\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s] (default: s): "; read -r step2_choice || true
+    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s/q] (default: s): "; read -r step2_choice || true
 
     case "${step2_choice:-s}" in
         1)
             cmd_github setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
             ;;
+        q|Q) return 0 ;;
+
         *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 2: Skipped\033[0m")
             ;;
@@ -1876,7 +1882,8 @@ cmd_setup() {
     fi
     echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames\033[0m"
     echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws tunnel setup' anytime later)\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s] (default: s): "; read -r step3_choice || true
+    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s/q] (default: s): "; read -r step3_choice || true
 
     case "${step3_choice:-s}" in
         1)
@@ -1884,6 +1891,8 @@ cmd_setup() {
                 bash "$TUNNEL_LIB" setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mTunnel setup incomplete — retry anytime with: aiws tunnel setup${_C_RESET}"
             fi
             ;;
+        q|Q) return 0 ;;
+
         *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 3: Skipped\033[0m")
             ;;
@@ -1905,7 +1914,8 @@ cmd_setup() {
     echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it\033[0m"
     echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects\033[0m"
     echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: s): "; read -r step4_choice || true
+    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: s): "; read -r step4_choice || true
 
     case "${step4_choice:-s}" in
         1)
@@ -1931,6 +1941,8 @@ cmd_setup() {
                 cmd_use "$chosen_proj" >/dev/null 2>&1 && step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mProject Activated:\033[0m $chosen_proj") || step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mProject Activation Failed\033[0m")
             fi
             ;;
+        q|Q) return 0 ;;
+
         *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 4: Skipped\033[0m")
             ;;
@@ -1947,7 +1959,8 @@ cmd_setup() {
     echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Start runtime & run 'aiws doctor' health check now\033[0m"
     echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Run 'aiws doctor' health check only\033[0m"
     echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: 1): "; read -r step5_choice || true
+    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: 1): "; read -r step5_choice || true
 
     case "${step5_choice:-1}" in
         1)
@@ -1962,6 +1975,8 @@ cmd_setup() {
         2)
             cmd_doctor || true
             ;;
+        q|Q) return 0 ;;
+
         *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
             ;;
