@@ -1963,6 +1963,11 @@ cmd_setup() {
 
 usage() {
     print_aiws_banner
+    print_usage_text
+}
+
+print_usage_text() {
+    
     cat <<EOF2
 
 ${_C_BOLD}Onboarding & Setup:${_C_RESET}
@@ -2097,6 +2102,7 @@ cmd_tui() {
             "Cloud & Git Integrations"
             "Update AIWS CLI"
             "Uninstall AIWS"
+            "Help / CLI Commands"
             "Exit"
         )
         
@@ -2131,6 +2137,10 @@ cmd_tui() {
             7) cmd_update ;;
             8) cmd_uninstall ;;
             9) 
+               print_header "HELP & CLI USAGE"
+               print_usage_text 
+               ;;
+            10) 
                local goodbyes=(
                    "Catch you on the flip side! (⌐■_■)"
                    "Disconnecting from the matrix... [>_ ]"
@@ -2149,7 +2159,7 @@ cmd_tui() {
                ;;
         esac
         
-        if [[ "$choice" -ne 9 ]]; then
+        if [[ "$choice" -ne 10 ]]; then
             echo
             echo -e "\033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
             read -r -s
