@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mosabbir-maruf/aiws-cli/actions/workflows/image.yml"><img src="https://github.com/mosabbir-maruf/aiws-cli/actions/workflows/image.yml/badge.svg" alt="Build AIWS" /></a>
-  <a href="https://github.com/mosabbir-maruf/aiws-cli/pkgs/container/aiws-cli"><img src="https://img.shields.io/badge/GHCR-ai--workstation--cli-blue?logo=docker" alt="Docker Image" /></a>
-  <a href="https://github.com/mosabbir-maruf/aiws-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml"><img src="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml/badge.svg" alt="Build AIWS" /></a>
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/pkgs/container/aiws-cli"><img src="https://img.shields.io/badge/GHCR-ai--workstation--cli-blue?logo=docker" alt="Docker Image" /></a>
+  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/runtime-Docker-blue" alt="Runtime" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black" alt="AI Runtime" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
@@ -370,7 +370,7 @@ The included installer validates Docker, Git, Python 3, Docker daemon access, an
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/mosabbir-maruf/aiws-cli.git ~/aiws-cli
+git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git ~/aiws-cli
 cd ~/aiws-cli
 ```
 
@@ -409,7 +409,7 @@ aiws github test
 `.env.example` currently contains:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:latest
+IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
 DSH_VERSION=0.1.2-rc.1
 ACTIVE_PROJECT=
 ACTIVE_PROJECT_PATH=
@@ -520,7 +520,7 @@ aiws stop
 
 ## CLI Reference
 
-The command-line interface is maintained in [mosabbir-maruf/aiws-cli](https://github.com/mosabbir-maruf/aiws-cli).
+The command-line interface is maintained in [mosabbir-maruf/ai-workstation-cli](https://github.com/mosabbir-maruf/ai-workstation-cli).
 
 Run:
 
@@ -979,8 +979,8 @@ Push to main
 Published references:
 
 ```text
-ghcr.io/mosabbir-maruf/aiws-cli:latest
-ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>
+ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
+ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
 ```
 
 ### Why SHA tags?
@@ -990,7 +990,7 @@ ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>
 For controlled deployments:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>
+IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
 ```
 
 is preferable to relying only on `latest`.
@@ -1177,7 +1177,7 @@ Run the generated SSH command from the client machine and verify that the app is
 ### Image problems
 
 ```bash
-docker image ls ghcr.io/mosabbir-maruf/aiws-cli
+docker image ls ghcr.io/mosabbir-maruf/ai-workstation-cli
 aiws doctor
 ```
 
@@ -1338,7 +1338,7 @@ Security is foundational to AIWS. To report a security vulnerability or learn mo
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](https://github.com/mosabbir-maruf/aiws-cli/blob/main/LICENSE) for the full license text.
+This project is licensed under the MIT License. See [LICENSE](https://github.com/mosabbir-maruf/ai-workstation-cli/blob/main/LICENSE) for the full license text.
 
 ---
 
