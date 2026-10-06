@@ -1951,12 +1951,12 @@ cmd_setup() {
     touch "$RUNTIME_DIR/.setup_done"
     echo
     echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
-    echo -e "\033[90m${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}\033[0m"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
     echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
-    echo -e "\033[90m• Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}\033[0m"
-    echo -e "\033[90m• Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}\033[0m"
-    echo -e "\033[90m• View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}\033[0m"
-    echo -e "\033[90m• Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}\033[0m"
+    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
     echo "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
     echo
 }
