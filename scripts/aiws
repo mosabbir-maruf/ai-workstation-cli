@@ -832,12 +832,28 @@ cmd_status() {
 }
 
 cmd_logs() {
-    compose logs -f --tail=100
+    echo
+    echo -e "  \033[1mWORKSTATION LOGS\033[0m"
+    echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m Tailing live container logs."
+    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m \033[1mPress Ctrl+C\033[0m to stop streaming and return to menu."
+    echo
+    trap ' ' INT
+    compose logs -f --tail=100 || true
+    trap 'tput cnorm; echo; exit 1' INT
 }
 
 cmd_shell() {
     require_active
-    docker exec -it aiws-cli bash
+    echo
+    echo -e "  \033[1mINTERACTIVE SHELL\033[0m"
+    echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m You are entering the isolated AIWS container environment."
+    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m \033[1mType 'exit' or press Ctrl+D\033[0m to close the shell and return to menu."
+    echo
+    trap ' ' INT
+    docker exec -it aiws-cli bash || true
+    trap 'tput cnorm; echo; exit 1' INT
 }
 
 cmd_preview() {
