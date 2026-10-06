@@ -24,6 +24,10 @@
   <a href="https://github.com/mosabbir-maruf"><img src="https://img.shields.io/badge/maintainer-Mosabbir%20Maruf-181717?logo=github" alt="Maintainer" /></a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/tui.png" alt="AIWS Interactive Terminal UI" style="max-width: 100%; border-radius: 8px;" />
+</p>
+
 ---
 
 ## Table of Contents
