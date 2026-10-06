@@ -2029,8 +2029,8 @@ cmd_tui() {
             clear
             print_aiws_banner
             echo
-            render_menu "First-time installation detected. Start guided setup?" "${setup_opts[@]}"
-            local choice=$?
+            local choice=0
+            render_menu "First-time installation detected. Start guided setup?" "${setup_opts[@]}" || choice=$?
             if [[ "$choice" -eq 0 ]]; then
                 cmd_setup
             fi
@@ -2056,8 +2056,8 @@ cmd_tui() {
         print_aiws_banner
         echo
         
-        render_menu "Interactive AIWS Dashboard (Use Arrow Keys)" "${main_opts[@]}"
-        local choice=$?
+        local choice=0
+        render_menu "Interactive AIWS Dashboard (Use Arrow Keys)" "${main_opts[@]}" || choice=$?
         
         clear
         print_aiws_banner
@@ -2072,8 +2072,8 @@ cmd_tui() {
             5) cmd_setup ;;
             6) 
                local tunnel_opts=("GitHub App Setup" "Cloudflare Tunnel Setup" "Back to Main Menu")
-               render_menu "Cloud & Git Integrations" "${tunnel_opts[@]}"
-               local tun_choice=$?
+               local tun_choice=0
+               render_menu "Cloud & Git Integrations" "${tunnel_opts[@]}" || tun_choice=$?
                if [[ "$tun_choice" -eq 0 ]]; then
                    cmd_github setup
                elif [[ "$tun_choice" -eq 1 ]]; then
