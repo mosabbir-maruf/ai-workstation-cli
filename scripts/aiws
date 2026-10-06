@@ -1703,6 +1703,13 @@ print_aiws_banner() {
         daemon_badge="${_C_YELLOW}stopped${_C_RESET}"
     fi
 
+    local title_len=${#subtitle}
+    local pad_len=$((62 - title_len))
+    local padding=""
+    if [[ $pad_len -gt 0 ]]; then
+        padding=$(printf '%*s' "$pad_len" '')
+    fi
+
     cat <<EOF2
 ${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮
 │  ${_C_BOLD} █████╗ ██╗██╗    ██╗███████╗     ██████╗██╗     ██╗${_C_RESET}${_C_CYAN}            │
@@ -1711,10 +1718,12 @@ ${_C_CYAN}╭──────────────────────�
 │  ${_C_BOLD}██╔══██║██║██║███╗██║╚════██║    ██║     ██║     ██║${_C_RESET}${_C_CYAN}            │
 │  ${_C_BOLD}██║  ██║██║╚███╔███╔╝███████║    ╚██████╗███████╗██║${_C_RESET}${_C_CYAN}            │
 │  ${_C_BOLD}╚═╝  ╚═╝╚═╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚═╝${_C_RESET}${_C_CYAN}            │
-│  ${_C_DIM}${subtitle}${_C_RESET}${_C_CYAN}          │
-├──────────────────────────────────────────────────────────────────┤${_C_RESET}
-  ${_C_BOLD}Project:${_C_RESET} $proj_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Daemon:${_C_RESET} $daemon_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}GitHub:${_C_RESET} $github_badge  ${_C_DIM}│${_C_RESET}  ${_C_BOLD}Tunnel:${_C_RESET} $tunnel_badge
-${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}
+│  ${_C_DIM}${subtitle}${_C_RESET}${_C_CYAN}${padding}│
+╰──────────────────────────────────────────────────────────────────╯${_C_RESET}
+  ${_C_BOLD}Project:${_C_RESET} $proj_badge
+  ${_C_BOLD}Daemon:${_C_RESET}  $daemon_badge
+  ${_C_BOLD}GitHub:${_C_RESET}  $github_badge
+  ${_C_BOLD}Tunnel:${_C_RESET}  $tunnel_badge
 EOF2
 }
 
@@ -1974,13 +1983,19 @@ render_menu() {
         read -rsn1 key
         if [[ "$key" == $'\x1b' ]]; then
             read -rsn2 -t 0.1 key
-            if [[ "$key" == "[A" || "$key" == "A" ]]; then
+            if [[ "$key" == "[A" || "$key" == "A" || "$key" == "OA" ]]; then
                 ((selected--))
                 [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
-            elif [[ "$key" == "[B" || "$key" == "B" ]]; then
+            elif [[ "$key" == "[B" || "$key" == "B" || "$key" == "OB" ]]; then
                 ((selected++))
                 [[ "$selected" -ge ${#options[@]} ]] && selected=0
             fi
+        elif [[ "$key" == "k" || "$key" == "w" || "$key" == "W" || "$key" == "K" ]]; then
+            ((selected--))
+            [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
+        elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
+            ((selected++))
+            [[ "$selected" -ge ${#options[@]} ]] && selected=0
         elif [[ "$key" == "" ]]; then
             break
         fi
