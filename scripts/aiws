@@ -1778,9 +1778,20 @@ EOF2
 }
 
 cmd_setup() {
-    print_header "SETUP & CONFIGURATION"
-    echo -e "\033[90mWalk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].\033[0m"
-    echo
+    local step_results=()
+
+    print_setup_header() {
+        clear
+        print_header "SETUP & CONFIGURATION"
+        echo -e "\033[90mWalk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].\033[0m"
+        echo
+        for res in "${step_results[@]}"; do
+            echo -e "$res"
+        done
+        [[ ${#step_results[@]} -gt 0 ]] && echo
+    }
+
+    print_setup_header
 
     # ------------------------------------------------------------------
     # STEP 1/5: Host Control Daemon & API Security Key
@@ -1805,8 +1816,7 @@ cmd_setup() {
             gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
             set_env_var "WORKSTATION_API_KEY" "$gen_key"
             cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
-            echo -e "\033[90m[\033[32m✓\033[90m]\033[0m \033[32mGenerated WORKSTATION_API_KEY:${_C_RESET} ${_C_BOLD}${gen_key}${_C_RESET}"
-            echo -e "\033[90m(Save this key to enter in your Web Dashboard connection dialog)${_C_RESET}"
+            step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mAPI Key Generated:\033[0m ${gen_key}")
             ;;
         2)
             local custom_key
@@ -1814,16 +1824,18 @@ cmd_setup() {
             if [[ -n "$custom_key" ]]; then
                 set_env_var "WORKSTATION_API_KEY" "$custom_key"
                 cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
-                echo -e "\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSaved custom WORKSTATION_API_KEY and restarted daemon.${_C_RESET}"
+                step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCustom API Key Saved\033[0m")
             else
-                echo -e "\033[90m[\033[33m↷\033[90m]\033[0m \033[90mEmpty input — skipped.${_C_RESET}"
+                step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 1: Empty input, skipped\033[0m")
             fi
             ;;
         *)
-            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 1.${_C_RESET}"
+            step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 1: Skipped\033[0m")
             ;;
     esac
     echo
+
+    print_setup_header
 
     # ------------------------------------------------------------------
     # STEP 2/5: GitHub App Credential Broker
@@ -1844,10 +1856,12 @@ cmd_setup() {
             cmd_github setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
             ;;
         *)
-            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 2.${_C_RESET}"
+            step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 2: Skipped\033[0m")
             ;;
     esac
     echo
+
+    print_setup_header
 
     # ------------------------------------------------------------------
     # STEP 3/5: Cloudflare Zero-Trust Tunnel (Anywhere Access)
@@ -1870,10 +1884,12 @@ cmd_setup() {
             fi
             ;;
         *)
-            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 3.${_C_RESET}"
+            step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 3: Skipped\033[0m")
             ;;
     esac
     echo
+
+    print_setup_header
 
     # ------------------------------------------------------------------
     # STEP 4/5: First Project Workspace (aiws add / aiws use)
@@ -1906,19 +1922,21 @@ cmd_setup() {
             fi
             ;;
         2)
-            echo "   Available projects in $PROJECTS_DIR:"
-            cmd_list || true
+            echo -e "\033[90mAvailable projects:\033[0m"
+            ls -1 "$PROJECTS_DIR" 2>/dev/null | awk \'{print "  " $0}\' || true
             local chosen_proj
-            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter project name to activate: " chosen_proj || true
+            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter project name to activate: "; read -r chosen_proj || true
             if [[ -n "$chosen_proj" ]]; then
-                cmd_use "$chosen_proj" || true
+                cmd_use "$chosen_proj" >/dev/null 2>&1 && step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mProject Activated:\033[0m $chosen_proj") || step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mProject Activation Failed\033[0m")
             fi
             ;;
         *)
-            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 4.${_C_RESET}"
+            step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 4: Skipped\033[0m")
             ;;
     esac
     echo
+
+    print_setup_header
 
     # ------------------------------------------------------------------
     # STEP 5/5: Launch Workstation Runtime & Health Check
@@ -1936,7 +1954,7 @@ cmd_setup() {
             if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
                 cmd_start || true
             else
-                echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mNo active project set yet — running 'aiws doctor' instead of 'aiws start'.${_C_RESET}"
+                step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mNo active project, skipped start\033[0m")
                 cmd_doctor || true
             fi
             ;;
@@ -1944,12 +1962,12 @@ cmd_setup() {
             cmd_doctor || true
             ;;
         *)
-            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 5.${_C_RESET}"
+            step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
             ;;
     esac
 
     touch "$RUNTIME_DIR/.setup_done"
-    echo
+    print_setup_header
     echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
     echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
