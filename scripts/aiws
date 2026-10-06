@@ -1731,6 +1731,13 @@ cmd_daemon() {
     esac
 }
 
+redraw_banner() {
+    tput sc
+    tput cup 0 0
+    print_aiws_banner
+    tput rc
+}
+
 print_aiws_banner() {
     setup_colors
     load_env 2>/dev/null || true
@@ -2309,8 +2316,8 @@ cmd_tui() {
         if [[ "$choice" -eq 255 ]]; then break; fi
 
         case "$choice" in
-            0) cmd_start ;;
-            1) cmd_stop ;;
+            0) cmd_start; redraw_banner ;;
+            1) cmd_stop; redraw_banner ;;
             2) cmd_status ;;
             3) cmd_logs ;;
             4)
@@ -2335,9 +2342,9 @@ cmd_tui() {
                     echo
                     
                     case "$d_choice" in
-                        0) cmd_daemon start ;;
-                        1) cmd_daemon restart ;;
-                        2) cmd_daemon stop ;;
+                        0) cmd_daemon start; redraw_banner ;;
+                        1) cmd_daemon restart; redraw_banner ;;
+                        2) cmd_daemon stop; redraw_banner ;;
                         3) cmd_daemon status ;;
                         4) cmd_daemon logs ;;
                     esac
