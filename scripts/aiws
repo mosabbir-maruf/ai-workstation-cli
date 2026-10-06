@@ -287,10 +287,10 @@ cmd_diff() {
         die "Not a git repository: $ACTIVE_PROJECT_PATH"
     fi
 
-    echo "=== Working Tree Status ==="
+    echo -e "\n  \033[1mWORKING TREE STATUS\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     git status --short
     echo ""
-    echo "=== Working Tree Diff ==="
+    echo -e "\n  \033[1mWORKING TREE DIFF\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     git diff HEAD 2>/dev/null || git diff
 }
 
@@ -885,7 +885,7 @@ cmd_preview() {
         echo "  DSH open: https://${CLOUDFLARED_DSH_HOSTNAME}${suffix}"
     }
 
-    echo "=== Preview ==="
+    echo -e "\n  \033[1mPREVIEW\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     echo
     echo "Project: $ACTIVE_PROJECT"
 
@@ -990,15 +990,15 @@ cmd_dsh_version() {
 }
 
 cmd_cache() {
-    echo "=== Docker ==="
+    echo -e "\n  \033[1mDOCKER\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     docker system df
 
     echo
-    echo "=== AI runtime ==="
+    echo -e "\n  \033[1mAI RUNTIME\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     du -sh "$RUNTIME_DIR" 2>/dev/null || true
 
     echo
-    echo "=== Project node_modules ==="
+    echo -e "\n  \033[1mPROJECT NODE_MODULES\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     find "$PROJECTS_DIR" \
         -type d \
         -name node_modules \
@@ -1073,11 +1073,11 @@ EOF
         esac
     fi
 
-    echo "=== Cleaning Docker builder cache ==="
+    echo -e "\n  \033[1mCLEANING DOCKER BUILDER CACHE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     docker builder prune -af
 
     echo
-    echo "=== Cleaning npm cache ==="
+    echo -e "\n  \033[1mCLEANING NPM CACHE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
     if docker ps --format '{{.Names}}' |
         grep -qx aiws-cli; then
@@ -1088,7 +1088,7 @@ EOF
 
     if [[ "$include_deps" -eq 1 ]]; then
         echo
-        echo "=== Removing project dependencies ==="
+        echo -e "\n  \033[1mREMOVING PROJECT DEPENDENCIES\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
         local removed=0
         local dir
@@ -1135,7 +1135,7 @@ cmd_uninstall() {
 }
 
 cmd_doctor() {
-    echo "=== AIWS Doctor ==="
+    echo -e "\n  \033[1mAIWS DOCTOR\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     echo
 
     local failures=0
@@ -1202,7 +1202,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo "=== Workstation ==="
+    echo -e "\n  \033[1mWORKSTATION\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
     if docker ps --format '{{.Names}}' |
        grep -qx aiws-cli; then
@@ -1272,7 +1272,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo "=== DSH / Harness ==="
+    echo -e "\n  \033[1mDSH / HARNESS\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
     if [[ -n "$container_id" ]]; then
         if dsh_version="$(
@@ -1303,7 +1303,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo "=== GitHub Broker ==="
+    echo -e "\n  \033[1mGITHUB BROKER\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
     broker_socket="$RUNTIME_DIR/github-broker/github.sock"
 
@@ -1325,7 +1325,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo "=== Runtime State ==="
+    echo -e "\n  \033[1mRUNTIME STATE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
 
     if [[ -d "$RUNTIME_DIR/dsh" ]]; then
         check_ok "DSH persistent state exists"

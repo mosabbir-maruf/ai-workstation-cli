@@ -245,16 +245,16 @@ github_setup() {
 
     if [[ -z "$app_id" || -z "$installation_id" || -z "$pem_input" ]]; then
         echo
-        echo "========================================"
-        echo "        GitHub App Setup"
-        echo "========================================"
+        
+        echo -e "  \033[1mGITHUB APP SETUP\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+        
         echo
 
-        read -r -p "GitHub App ID: " app_id
+        echo -e -n "  \033[90mGitHub App ID:\033[0m "; read -r app_id
         [[ "$app_id" =~ ^[0-9]+$ ]] ||
             die "Invalid App ID."
 
-        read -r -p "GitHub Installation ID: " installation_id
+        echo -e -n "  \033[90mGitHub Inst ID:\033[0m "; read -r installation_id
         [[ "$installation_id" =~ ^[0-9]+$ ]] ||
             die "Invalid Installation ID."
 
@@ -334,7 +334,7 @@ github_status() {
     [[ -f "$ENV_FILE" ]] &&
         source "$ENV_FILE" || true
 
-    echo "=== GitHub Integration ==="
+    echo -e "\n  \033[1mGITHUB INTEGRATION\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
     echo
     echo "App ID:          ${GITHUB_APP_ID:-not configured}"
     echo "Installation ID: ${GITHUB_INSTALLATION_ID:-not configured}"
