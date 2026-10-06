@@ -2251,7 +2251,6 @@ cmd_edit_configs() {
             "Edit Cloudflare Tunnel"
             "Edit Workspace Project"
             "Open Raw .env Configuration"
-            "Back to Main Menu"
         )
         local choice=0
         render_menu "Rotate & Edit Configurations" "${edit_opts[@]}" || choice=$?
@@ -2369,9 +2368,6 @@ cmd_edit_configs() {
                 ${EDITOR:-nano} "$ENV_FILE"
                 load_env 2>/dev/null || true
                 ;;
-            5)
-                break
-                ;;
         esac
     done
 }
@@ -2449,12 +2445,11 @@ cmd_tui() {
                         "Dev Server Logs (aiws app logs)"
                         "Preview URLs & Ports (aiws preview)"
                         "Open Container Shell (aiws shell)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local w_choice=0
                     render_menu "Workstation Operations" "${ws_opts[@]}" || w_choice=$?
-                    if [[ "$w_choice" -eq 255 || "$w_choice" -eq 11 ]]; then break; fi
+                    if [[ "$w_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$w_choice" in
                         0) run_tui_cmd cmd_start; load_env 2>/dev/null || true; redraw_banner ;;
@@ -2483,12 +2478,11 @@ cmd_tui() {
                         "Git Status (aiws git status)"
                         "Git Diff (aiws diff)"
                         "Git Pull (aiws pull)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local p_choice=0
                     render_menu "Projects & Workspace Management" "${proj_opts[@]}" || p_choice=$?
-                    if [[ "$p_choice" -eq 255 || "$p_choice" -eq 7 ]]; then break; fi
+                    if [[ "$p_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$p_choice" in
                         0) run_tui_cmd cmd_list ;;
@@ -2557,12 +2551,11 @@ cmd_tui() {
                         "Sync Harness Workspace (aiws harness sync)"
                         "Update @deepseek-ai/dsh (aiws dsh update)"
                         "Check DSH Version (aiws dsh version)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local h_choice=0
                     render_menu "DSH Agent & Harness Runtime" "${harness_opts[@]}" || h_choice=$?
-                    if [[ "$h_choice" -eq 255 || "$h_choice" -eq 7 ]]; then break; fi
+                    if [[ "$h_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$h_choice" in
                         0) run_tui_cmd cmd_harness_status ;;
@@ -2591,12 +2584,11 @@ cmd_tui() {
                         "Sync Port (aiws tunnel sync)"
                         "Setup Tunnel Credentials (aiws tunnel setup)"
                         "View Tunnel Logs (aiws tunnel logs)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local t_choice=0
                     render_menu "Cloudflare Edge Tunnel" "${tunnel_opts[@]}" || t_choice=$?
-                    if [[ "$t_choice" -eq 255 || "$t_choice" -eq 7 ]]; then break; fi
+                    if [[ "$t_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     if [[ ! -f "$TUNNEL_LIB" ]]; then
                         echo "Tunnel module missing at $TUNNEL_LIB"
@@ -2626,12 +2618,11 @@ cmd_tui() {
                         "GitHub App Status (aiws github status)"
                         "Test Authentication (aiws github test)"
                         "Setup GitHub App Credentials (aiws github setup)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local gh_choice=0
                     render_menu "GitHub App & VCS Integration" "${gh_opts[@]}" || gh_choice=$?
-                    if [[ "$gh_choice" -eq 255 || "$gh_choice" -eq 3 ]]; then break; fi
+                    if [[ "$gh_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$gh_choice" in
                         0) run_tui_cmd cmd_github status ;;
@@ -2650,12 +2641,11 @@ cmd_tui() {
                         "Restart Daemon (aiws daemon restart)"
                         "Stop Daemon (aiws daemon stop)"
                         "View Daemon Logs (aiws daemon logs)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local d_choice=0
                     render_menu "Manage Host Control Daemon" "${daemon_opts[@]}" || d_choice=$?
-                    if [[ "$d_choice" -eq 255 || "$d_choice" -eq 5 ]]; then break; fi
+                    if [[ "$d_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$d_choice" in
                         0) run_tui_cmd cmd_daemon status ;;
@@ -2678,12 +2668,11 @@ cmd_tui() {
                         "Deep Clean Cache (aiws cache clear --deps --yes)"
                         "Export Workspace State (aiws state export)"
                         "Import Workspace State (aiws state import)"
-                        "Back to Main Menu"
                     )
                     clear; print_aiws_banner; echo
                     local sys_choice=0
                     render_menu "System Diagnostics, Cache & State" "${sys_opts[@]}" || sys_choice=$?
-                    if [[ "$sys_choice" -eq 255 || "$sys_choice" -eq 7 ]]; then break; fi
+                    if [[ "$sys_choice" -eq 255 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$sys_choice" in
                         0) run_tui_cmd cmd_doctor ;;
