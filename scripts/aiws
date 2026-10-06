@@ -40,7 +40,7 @@ print_header() {
 }
 prompt_return() {
     echo
-    echo -e "[90m[[36m Enter [90m] Return to menu[0m[K"
+    echo -e "\033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
     tput civis
     read -r -s
     tput cnorm
@@ -2016,39 +2016,39 @@ cmd_setup() {
 
 print_usage_text() {
     echo
-    echo -e "[1m  [ ONBOARDING & SETUP ][0m"
-    echo -e "  [36m❯[0m aiws [36msetup[0m                    [90mLaunch interactive setup wizard[0m"
-    echo -e "  [36m❯[0m aiws [36mdoctor[0m                   [90mRun full host & container diagnostics[0m"
+    echo -e "\033[1m  [ ONBOARDING & SETUP ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36msetup\033[0m                    \033[90mLaunch interactive setup wizard\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mdoctor\033[0m                   \033[90mRun full host & container diagnostics\033[0m"
     echo
-    echo -e "[1m  [ PROJECTS ][0m"
-    echo -e "  [36m❯[0m aiws [36madd[0m <url>                [90mClone a GitHub repo to ~/projects[0m"
-    echo -e "  [36m❯[0m aiws [36muse[0m <project>            [90mSet active project & mount to /workspace[0m"
-    echo -e "  [36m❯[0m aiws [36mlist[0m                     [90mList all cloned projects[0m"
-    echo -e "  [36m❯[0m aiws [36mremove[0m <project>         [90mRemove a project from ~/projects[0m"
+    echo -e "\033[1m  [ PROJECTS ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36madd\033[0m <url>                \033[90mClone a GitHub repo to ~/projects\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36muse\033[0m <project>            \033[90mSet active project & mount to /workspace\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mlist\033[0m                     \033[90mList all cloned projects\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mremove\033[0m <project>         \033[90mRemove a project from ~/projects\033[0m"
     echo
-    echo -e "[1m  [ GIT (ZERO-PAT) ][0m"
-    echo -e "  [36m❯[0m aiws [36mdiff[0m                     [90mShow working tree status & diff[0m"
-    echo -e "  [36m❯[0m aiws [36mpull[0m                     [90mPull latest changes[0m"
-    echo -e "  [36m❯[0m aiws [36mpush[0m \"<message>\"         [90mStage, commit, and push[0m"
+    echo -e "\033[1m  [ GIT (ZERO-PAT) ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mdiff\033[0m                     \033[90mShow working tree status & diff\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mpull\033[0m                     \033[90mPull latest changes\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mpush\033[0m \"<message>\"         \033[90mStage, commit, and push\033[0m"
     echo
-    echo -e "[1m  [ RUNTIME & APP ][0m"
-    echo -e "  [36m❯[0m aiws [36mstart[0m | [36mstop[0m | [36mrestart[0m   [90mManage container runtime[0m"
-    echo -e "  [36m❯[0m aiws [36mstatus[0m | [36mlogs[0m | [36mshell[0m    [90mInspect state, logs, or open bash[0m"
-    echo -e "  [36m❯[0m aiws [36mrun[0m                      [90mAuto-detect & start dev server[0m"
-    echo -e "  [36m❯[0m aiws [36mapp[0m {stop|restart...}    [90mManage the internal app server[0m"
-    echo -e "  [36m❯[0m aiws [36mpreview[0m                  [90mShow local & Cloudflare URLs for ports[0m"
+    echo -e "\033[1m  [ RUNTIME & APP ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mstart\033[0m | \033[36mstop\033[0m | \033[36mrestart\033[0m   \033[90mManage container runtime\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mstatus\033[0m | \033[36mlogs\033[0m | \033[36mshell\033[0m    \033[90mInspect state, logs, or open bash\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mrun\033[0m                      \033[90mAuto-detect & start dev server\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mapp\033[0m {stop|restart...}    \033[90mManage the internal app server\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mpreview\033[0m                  \033[90mShow local & Cloudflare URLs for ports\033[0m"
     echo
-    echo -e "[1m  [ DSH AGENT HARNESS ][0m"
-    echo -e "  [36m❯[0m aiws [36mharness[0m {start...}       [90mManage the Agent Harness API[0m"
-    echo -e "  [36m❯[0m aiws [36mdsh update[0m [version]     [90mUpdate @deepseek-ai/dsh[0m"
-    echo -e "  [36m❯[0m aiws [36mdsh version[0m              [90mPrint active DSH version[0m"
+    echo -e "\033[1m  [ DSH AGENT HARNESS ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mharness\033[0m {start...}       \033[90mManage the Agent Harness API\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mdsh update\033[0m [version]     \033[90mUpdate @deepseek-ai/dsh\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mdsh version\033[0m              \033[90mPrint active DSH version\033[0m"
     echo
-    echo -e "[1m  [ SYSTEM & INTEGRATIONS ][0m"
-    echo -e "  [36m❯[0m aiws [36mgithub[0m | [36mtunnel[0m          [90mSetup integrations[0m"
-    echo -e "  [36m❯[0m aiws [36mdaemon[0m {start|stop...}   [90mManage host API daemon[0m"
-    echo -e "  [36m❯[0m aiws [36mstate[0m {export|import}    [90mBackup/Restore workspace[0m"
-    echo -e "  [36m❯[0m aiws [36mcache[0m clear              [90mClear persistent caches[0m"
-    echo -e "  [36m❯[0m aiws [36mupdate[0m | [36mupgrade[0m         [90mUpdate CLI and fetch latest image[0m"
+    echo -e "\033[1m  [ SYSTEM & INTEGRATIONS ]\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mgithub\033[0m | \033[36mtunnel\033[0m          \033[90mSetup integrations\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mdaemon\033[0m {start|stop...}   \033[90mManage host API daemon\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mstate\033[0m {export|import}    \033[90mBackup/Restore workspace\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mcache\033[0m clear              \033[90mClear persistent caches\033[0m"
+    echo -e "  \033[36m❯\033[0m aiws \033[36mupdate\033[0m | \033[36mupgrade\033[0m         \033[90mUpdate CLI and fetch latest image\033[0m"
     echo
 }
 
@@ -2103,8 +2103,7 @@ render_menu() {
             clear
             print_header "HELP & CLI USAGE"
             print_usage_text
-            echo -e -n "\n\033[90m[\033[36m Enter \033[90m] Return to menu...\033[0m"
-            read -r || true
+            prompt_return
             clear
             print_aiws_banner
             tput civis
@@ -2152,15 +2151,15 @@ cmd_edit_configs() {
                 print_header "EDIT HOST API KEY"
                 local current_key="${WORKSTATION_API_KEY:-}"
                 if [[ -n "$current_key" ]]; then
-                    echo -e "[90mCurrent status: [32mConfigured[0m (${current_key:0:6}••••••••)[0m"
+                    echo -e "\033[90mCurrent status: \033[32mConfigured\033[0m (${current_key:0:6}••••••••)\033[0m"
                 else
-                    echo -e "[90mCurrent status: [33mNo API Key configured[0m[0m"
+                    echo -e "\033[90mCurrent status: \033[33mNo API Key configured\033[0m\033[0m"
                 fi
-                echo -e "[90m[1m[1][0m Auto-generate a secure 32-byte API key[0m"
-                echo -e "[90m[1m[2][0m Enter a custom API key (Paste new value)[0m"
-                echo -e "[90m[1m[b][0m Back to Edit Menu[0m"
+                echo -e "\033[90m\033[1m[1]\033[0m Auto-generate a secure 32-byte API key\033[0m"
+                echo -e "\033[90m\033[1m[2]\033[0m Enter a custom API key (Paste new value)\033[0m"
+                echo -e "\033[90m\033[1m[b]\033[0m Back to Edit Menu\033[0m"
                 echo -e -n "
-[90m[[36m?[90m][0m Select option [1/2/b] (default: b): "; read -r edit_choice || true
+\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/b] (default: b): "; read -r edit_choice || true
                 case "${edit_choice:-b}" in
                     1)
                         local gen_key
@@ -2168,21 +2167,21 @@ cmd_edit_configs() {
                         set_env_var "WORKSTATION_API_KEY" "$gen_key"
                         cmd_daemon restart >/dev/null 2>&1 || true
                         echo -e "
-[32m✓ API Key Generated and Saved: ${gen_key}[0m"
+\033[32m✓ API Key Generated and Saved: ${gen_key}\033[0m"
                         prompt_return
                         ;;
                     2)
                         local custom_key
                         echo -e -n "
-[90m[[36m?[90m][0m Paste new WORKSTATION_API_KEY: "; read -r custom_key || true
+\033[90m[\033[36m?\033[90m]\033[0m Paste new WORKSTATION_API_KEY: "; read -r custom_key || true
                         if [[ -n "$custom_key" ]]; then
                             set_env_var "WORKSTATION_API_KEY" "$custom_key"
                             cmd_daemon restart >/dev/null 2>&1 || true
                             echo -e "
-[32m✓ Custom API Key Saved[0m"
+\033[32m✓ Custom API Key Saved\033[0m"
                         else
                             echo -e "
-[33mNo input. Aborted.[0m"
+\033[33mNo input. Aborted.\033[0m"
                         fi
                         prompt_return
                         ;;
@@ -2192,37 +2191,31 @@ cmd_edit_configs() {
             1)
                 clear
                 cmd_github setup
-                echo -e "
-Press any key to return..."
-                read -rsn1 || true
+                prompt_return
                 ;;
             2)
                 clear
                 [[ -f "$TUNNEL_LIB" ]] && bash "$TUNNEL_LIB" setup || echo "Tunnel module missing."
-                echo -e "
-Press any key to return..."
-                read -rsn1 || true
+                prompt_return
                 ;;
             3)
                 clear
                 print_header "EDIT WORKSPACE PROJECT"
-                echo -e "[90mCurrent active project: [32m${ACTIVE_PROJECT:-None}[0m[0m"
-                echo -e "[90m[1m[1][0m Clone a new GitHub repository URL[0m"
-                echo -e "[90m[1m[2][0m Select from existing cloned projects[0m"
-                echo -e "[90m[1m[b][0m Back to Edit Menu[0m"
+                echo -e "\033[90mCurrent active project: \033[32m${ACTIVE_PROJECT:-None}\033[0m\033[0m"
+                echo -e "\033[90m\033[1m[1]\033[0m Clone a new GitHub repository URL\033[0m"
+                echo -e "\033[90m\033[1m[2]\033[0m Select from existing cloned projects\033[0m"
+                echo -e "\033[90m\033[1m[b]\033[0m Back to Edit Menu\033[0m"
                 echo -e -n "
-[90m[[36m?[90m][0m Select option [1/2/b] (default: b): "; read -r proj_choice || true
+\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/b] (default: b): "; read -r proj_choice || true
                 case "${proj_choice:-b}" in
                     1)
                         local repo_url
                         echo -e -n "
-[90m[[36m?[90m][0m Paste GitHub repository URL: "; read -r repo_url || true
+\033[90m[\033[36m?\033[90m]\033[0m Paste GitHub repository URL: "; read -r repo_url || true
                         if [[ -n "$repo_url" ]]; then
                             cmd_add "$repo_url"
                         fi
-                        echo -e "
-Press any key to return..."
-                        read -rsn1 || true
+                        prompt_return
                         ;;
                     2)
                         local existing_projects=()
@@ -2233,10 +2226,10 @@ Press any key to return..."
                         done
                         if [[ ${#existing_projects[@]} -eq 0 ]]; then
                             echo -e "
-[33mNo existing projects found in $PROJECTS_DIR[0m"
+\033[33mNo existing projects found in $PROJECTS_DIR\033[0m"
                         else
                             echo -e "
-[1mSelect a project to set as active:[0m"
+\033[1mSelect a project to set as active:\033[0m"
                             select p_name in "${existing_projects[@]}"; do
                                 if [[ -n "$p_name" ]]; then
                                     cmd_use "$p_name"
@@ -2246,9 +2239,7 @@ Press any key to return..."
                                 fi
                             done
                         fi
-                        echo -e "
-Press any key to return..."
-                        read -rsn1 || true
+                        prompt_return
                         ;;
                     *) ;;
                 esac
