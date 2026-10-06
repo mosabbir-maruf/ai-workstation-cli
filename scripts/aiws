@@ -29,6 +29,17 @@ PORTS_LIB="$ROOT/scripts/lib/ports.sh"
 
 mkdir -p "$PROJECTS_DIR" "$RUNTIME_DIR" "$HARNESS_RUNTIME_DIR" "$APP_RUNTIME_DIR"
 
+print_header() {
+    local text="$1"
+    local text_len=${#text}
+    local border=""
+    for (( i=0; i<text_len+2; i++ )); do border+="─"; done
+    echo -e "  \033[36m╭${border}╮\033[0m"
+    echo -e "  \033[36m│\033[0m \033[1m${text}\033[0m \033[36m│\033[0m"
+    echo -e "  \033[36m╰${border}╯\033[0m"
+}
+export -f print_header
+
 log_info() {
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m $1"
 }
@@ -287,10 +298,10 @@ cmd_diff() {
         die "Not a git repository: $ACTIVE_PROJECT_PATH"
     fi
 
-    echo -e "\n  \033[1mWORKING TREE STATUS\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "WORKING TREE STATUS"
     git status --short
     echo ""
-    echo -e "\n  \033[1mWORKING TREE DIFF\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "WORKING TREE DIFF"
     git diff HEAD 2>/dev/null || git diff
 }
 
@@ -770,8 +781,7 @@ cmd_app_status() {
 
     if [[ "${APP_STATUS_QUIET:-0}" != "1" ]]; then
         echo
-        echo -e "  \033[1mAPPLICATION STATUS\033[0m"
-        echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+        print_header "APPLICATION STATUS"
         echo
     else
         echo -e "  \033[1mAPPLICATION\033[0m"
@@ -809,8 +819,7 @@ cmd_status() {
     load_env
 
     echo
-    echo -e "  \033[1mAIWS SYSTEM STATUS\033[0m"
-    echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+    print_header "AIWS SYSTEM STATUS"
     echo
     echo -e "  \033[1mWORKSTATION\033[0m"
     echo -e "    \033[90mProject  :\033[0m ${ACTIVE_PROJECT:-none}"
@@ -833,8 +842,7 @@ cmd_status() {
 
 cmd_logs() {
     echo
-    echo -e "  \033[1mWORKSTATION LOGS\033[0m"
-    echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+    print_header "WORKSTATION LOGS"
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m Tailing live container logs."
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m \033[1mPress Ctrl+C\033[0m to stop streaming and return to menu."
     echo
@@ -846,8 +854,7 @@ cmd_logs() {
 cmd_shell() {
     require_active
     echo
-    echo -e "  \033[1mINTERACTIVE SHELL\033[0m"
-    echo -e "  \033[90m─────────────────────────────────────────\033[0m"
+    print_header "INTERACTIVE SHELL"
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m You are entering the isolated AIWS container environment."
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m \033[1mType 'exit' or press Ctrl+D\033[0m to close the shell and return to menu."
     echo
@@ -901,7 +908,7 @@ cmd_preview() {
         echo "  DSH open: https://${CLOUDFLARED_DSH_HOSTNAME}${suffix}"
     }
 
-    echo -e "\n  \033[1mPREVIEW\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "PREVIEW"
     echo
     echo "Project: $ACTIVE_PROJECT"
 
@@ -1006,15 +1013,15 @@ cmd_dsh_version() {
 }
 
 cmd_cache() {
-    echo -e "\n  \033[1mDOCKER\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "DOCKER"
     docker system df
 
     echo
-    echo -e "\n  \033[1mAI RUNTIME\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "AI RUNTIME"
     du -sh "$RUNTIME_DIR" 2>/dev/null || true
 
     echo
-    echo -e "\n  \033[1mPROJECT NODE_MODULES\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "PROJECT NODE_MODULES"
     find "$PROJECTS_DIR" \
         -type d \
         -name node_modules \
@@ -1089,11 +1096,11 @@ EOF
         esac
     fi
 
-    echo -e "\n  \033[1mCLEANING DOCKER BUILDER CACHE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "CLEANING DOCKER BUILDER CACHE"
     docker builder prune -af
 
     echo
-    echo -e "\n  \033[1mCLEANING NPM CACHE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "CLEANING NPM CACHE"
 
     if docker ps --format '{{.Names}}' |
         grep -qx aiws-cli; then
@@ -1104,7 +1111,7 @@ EOF
 
     if [[ "$include_deps" -eq 1 ]]; then
         echo
-        echo -e "\n  \033[1mREMOVING PROJECT DEPENDENCIES\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+        echo; print_header "REMOVING PROJECT DEPENDENCIES"
 
         local removed=0
         local dir
@@ -1151,7 +1158,7 @@ cmd_uninstall() {
 }
 
 cmd_doctor() {
-    echo -e "\n  \033[1mAIWS DOCTOR\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "AIWS DOCTOR"
     echo
 
     local failures=0
@@ -1218,7 +1225,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo -e "\n  \033[1mWORKSTATION\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "WORKSTATION"
 
     if docker ps --format '{{.Names}}' |
        grep -qx aiws-cli; then
@@ -1288,7 +1295,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo -e "\n  \033[1mDSH / HARNESS\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "DSH / HARNESS"
 
     if [[ -n "$container_id" ]]; then
         if dsh_version="$(
@@ -1319,7 +1326,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo -e "\n  \033[1mGITHUB BROKER\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "GITHUB BROKER"
 
     broker_socket="$RUNTIME_DIR/github-broker/github.sock"
 
@@ -1341,7 +1348,7 @@ cmd_doctor() {
     fi
 
     echo
-    echo -e "\n  \033[1mRUNTIME STATE\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "RUNTIME STATE"
 
     if [[ -d "$RUNTIME_DIR/dsh" ]]; then
         check_ok "DSH persistent state exists"

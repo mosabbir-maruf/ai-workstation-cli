@@ -101,7 +101,7 @@ detect_app_port() {
 tunnel_setup() {
     echo
     
-    echo -e "  \033[1mCLOUDFLARE TUNNEL SETUP\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    print_header "CLOUDFLARE TUNNEL SETUP"
     
     echo
     echo -e "  \033[90m[\033[36mi\033[90m]\033[0m First, in Cloudflare Zero Trust -> Networks -> Tunnels:"
@@ -226,7 +226,7 @@ tunnel_sync() {
 tunnel_status() {
     load_env_quiet
 
-    echo -e "\n  \033[1mCLOUDFLARE TUNNEL\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "CLOUDFLARE TUNNEL"
     echo
     [[ -f "$TOKEN_FILE" ]] &&
         echo "Connector token: configured" ||

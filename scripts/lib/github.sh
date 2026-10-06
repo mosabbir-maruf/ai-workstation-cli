@@ -246,7 +246,7 @@ github_setup() {
     if [[ -z "$app_id" || -z "$installation_id" || -z "$pem_input" ]]; then
         echo
         
-        echo -e "  \033[1mGITHUB APP SETUP\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+        print_header "GITHUB APP SETUP"
         
         echo
 
@@ -334,7 +334,7 @@ github_status() {
     [[ -f "$ENV_FILE" ]] &&
         source "$ENV_FILE" || true
 
-    echo -e "\n  \033[1mGITHUB INTEGRATION\033[0m\n  \033[90m─────────────────────────────────────────\033[0m"
+    echo; print_header "GITHUB INTEGRATION"
     echo
     echo "App ID:          ${GITHUB_APP_ID:-not configured}"
     echo "Installation ID: ${GITHUB_INSTALLATION_ID:-not configured}"
