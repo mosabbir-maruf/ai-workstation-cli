@@ -2104,7 +2104,8 @@ cmd_tui() {
         
         if [[ "$choice" -ne 9 ]]; then
             echo
-            read -r -p "Press Enter to return to menu..."
+            echo -e "  \033[90m[\033[36m Enter \033[90m] Return to menu\033[0m\033[K"
+            read -r -s
         fi
     done
 }
