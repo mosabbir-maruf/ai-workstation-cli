@@ -379,6 +379,12 @@ stop_process() {
 
 cmd_start() {
     cleanup_stale_state
+
+    if dsh_running && bridge_running; then
+        echo -e "\033[90m[\033[33m!\033[90m]\033[0m Harness is already running."
+        return 0
+    fi
+
     : > "$LOG_FILE"
 
     start_dsh
@@ -406,6 +412,13 @@ cmd_start() {
 }
 
 cmd_stop() {
+    cleanup_stale_state
+
+    if ! dsh_running && ! bridge_running; then
+        echo -e "\033[90m[\033[33m!\033[90m]\033[0m Harness is already stopped."
+        return 0
+    fi
+
     stop_process "$BRIDGE_PID_FILE"
     stop_process "$DSH_PID_FILE"
 
@@ -413,7 +426,8 @@ cmd_stop() {
 }
 
 cmd_restart() {
-    cmd_stop
+    stop_process "$BRIDGE_PID_FILE"
+    stop_process "$DSH_PID_FILE"
     cmd_start
 }
 

@@ -28,6 +28,18 @@ TOKEN_FILE="$SECRETS_DIR/cloudflared-token"
 SERVICE_NAME="cloudflared"
 PORTS_SCRIPT="$LIB_DIR/ports.sh"
 
+if ! declare -F print_header >/dev/null 2>&1; then
+    print_header() {
+        local text="$1"
+        local text_len=${#text}
+        local border=""
+        for (( i=0; i<text_len+2; i++ )); do border+="─"; done
+        echo -e "\033[36m╭${border}╮\033[0m"
+        echo -e "\033[36m│\033[0m \033[1m${text}\033[0m \033[36m│\033[0m"
+        echo -e "\033[36m╰${border}╯\033[0m"
+    }
+fi
+
 die() {
     echo "ERROR: $*" >&2
     exit 1
@@ -242,6 +254,40 @@ tunnel_status() {
     echo
 }
 
+tunnel_start() {
+    if ! command -v cloudflared >/dev/null 2>&1; then
+        die "cloudflared is not installed. Run: aiws tunnel setup"
+    fi
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        echo -e "\033[90m[\033[33m!\033[90m]\033[0m Tunnel is already running."
+        return 0
+    fi
+    sudo systemctl start "$SERVICE_NAME"
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        echo -e "\033[90m[\033[32m✓\033[90m]\033[0m Tunnel started."
+    else
+        die "Failed to start tunnel. Check: sudo journalctl -u $SERVICE_NAME -n 50"
+    fi
+}
+
+tunnel_stop() {
+    if ! systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        echo -e "\033[90m[\033[33m!\033[90m]\033[0m Tunnel is already stopped."
+        return 0
+    fi
+    sudo systemctl stop "$SERVICE_NAME"
+    echo -e "\033[90m[\033[32m✓\033[90m]\033[0m Tunnel stopped."
+}
+
+tunnel_restart() {
+    if ! systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        tunnel_start
+        return 0
+    fi
+    sudo systemctl restart "$SERVICE_NAME"
+    echo -e "\033[90m[\033[32m✓\033[90m]\033[0m Tunnel restarted."
+}
+
 case "${1:-}" in
     setup)
         tunnel_setup
@@ -253,16 +299,19 @@ case "${1:-}" in
         tunnel_status
         ;;
     start)
-        sudo systemctl start "$SERVICE_NAME"
+        tunnel_start
         ;;
     stop)
-        sudo systemctl stop "$SERVICE_NAME"
+        tunnel_stop
+        ;;
+    restart)
+        tunnel_restart
         ;;
     logs)
         sudo journalctl -u "$SERVICE_NAME" -n 100 -f
         ;;
     *)
-        echo "Usage: tunnel.sh {setup|sync [port]|status|start|stop|logs}"
+        echo "Usage: tunnel.sh {setup|sync [port]|status|start|stop|restart|logs}"
         exit 1
         ;;
 esac

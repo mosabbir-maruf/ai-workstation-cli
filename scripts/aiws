@@ -52,6 +52,10 @@ log_info() {
     echo -e "\033[90m[\033[36mi\033[90m]\033[0m $1"
 }
 
+log_warn() {
+    echo -e "\033[90m[\033[33m!\033[90m]\033[0m $1"
+}
+
 log_success() {
     echo -e "\033[90m[\033[32m✓\033[90m]\033[0m $1"
 }
@@ -271,7 +275,7 @@ cmd_use() {
     load_env
 
     if [[ "${ACTIVE_PROJECT:-}" == "$name" ]]; then
-        echo "Already active: $name"
+        log_warn "Project '$name' is already active."
         return 0
     fi
 
@@ -379,44 +383,46 @@ harness_exec() {
 }
 
 cmd_harness_start() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        die "Workstation is not running."
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
 
     harness_exec start
 }
 
 cmd_harness_stop() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_warn "Workstation is not running (Harness is already stopped)."
         return 0
+    fi
 
     harness_exec stop
 }
 
 cmd_harness_restart() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        die "Workstation is not running."
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
 
     harness_exec restart
 }
 
 cmd_harness_sync() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        die "Workstation is not running."
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
 
     harness_exec sync
 }
 
 cmd_harness_status() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        {
-            log_info "Harness is already stopped."
-            return 0
-        }
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_info "Workstation is not running (Harness is stopped)."
+        return 0
+    fi
 
     harness_exec status || true
 }
@@ -425,6 +431,12 @@ cmd_start() {
     print_header "START WORKSTATION"
     echo
     require_active
+
+    if docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_warn "Workstation is already running."
+        echo -e "Use '\033[1maiws restart\033[0m' if you want to restart it."
+        return 0
+    fi
 
     mkdir -p \
         "$RUNTIME_DIR/dsh" \
@@ -462,8 +474,13 @@ cmd_start() {
 cmd_stop() {
     print_header "STOP WORKSTATION"
     echo
-    cmd_app_stop || true
-    cmd_harness_stop || true
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_warn "Workstation is already stopped."
+        rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
+        return 0
+    fi
+    cmd_app_stop >/dev/null 2>&1 || true
+    cmd_harness_stop >/dev/null 2>&1 || true
     compose down
     rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
     log_success "Workstation stopped."
@@ -472,8 +489,17 @@ cmd_stop() {
 cmd_restart() {
     print_header "RESTART WORKSTATION"
     echo
+    require_active
+
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_info "Workstation is not running. Starting..."
+        cmd_start
+        return 0
+    fi
+
     compose restart
     cmd_harness_start
+    log_success "Workstation restarted."
 }
 
 app_container_pid() {
@@ -588,12 +614,13 @@ cmd_run() {
     require_active
     load_env
 
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        die "Workstation is not running. Run: aiws start"
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
 
     if app_running; then
-        echo "Project already running."
+        log_warn "Project is already running."
         echo "PID: $(app_container_pid)"
         return 0
     fi
@@ -730,7 +757,7 @@ cmd_run() {
 cmd_app_stop() {
     if ! docker ps --format '{{.Names}}' |
         grep -qx aiws-cli; then
-        echo "Workstation is not running."
+        log_warn "Workstation is not running (Project is already stopped)."
         return 0
     fi
 
@@ -742,7 +769,7 @@ cmd_app_stop() {
     if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
         rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
         : > "$APP_RUNTIME_DIR/app.log" 2>/dev/null || true
-        echo "Project is not running."
+        log_warn "Project is already stopped."
         return 0
     fi
 
@@ -821,12 +848,20 @@ cmd_app_status() {
 }
 
 cmd_app_logs() {
-    docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli ||
-        die "Workstation is not running."
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running."
+        return 1
+    fi
 
+    echo
+    print_header "DEV SERVER LOGS"
+    echo -e "\033[90m[\033[36mi\033[90m]\033[0m Tailing live application logs."
+    echo -e "\033[90m[\033[36mi\033[90m]\033[0m \033[1mPress Ctrl+C\033[0m to stop streaming and go back to menu."
+    echo
+    trap ' ' INT
     docker exec aiws-cli \
-        sh -c 'tail -n 100 -f /run/aiws-cli/app/app.log'
+        sh -c 'tail -n 100 -f /run/aiws-cli/app/app.log' || true
+    trap 'tput cnorm; echo; exit 1' INT
 }
 
 cmd_status() {
@@ -867,6 +902,10 @@ cmd_logs() {
 
 cmd_shell() {
     require_active
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
     echo
     print_header "INTERACTIVE SHELL"
     echo -e "\033[90m[\033[36mi\033[90m]\033[0m You are entering the isolated AIWS container environment."
@@ -1001,6 +1040,11 @@ cmd_preview() {
 cmd_dsh_update() {
     require_active
 
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
+
     local version="${1:-latest}"
 
     cmd_harness_stop || true
@@ -1017,10 +1061,15 @@ cmd_dsh_update() {
 
     cmd_harness_start || true
 
-    echo "DSH updated."
+    log_success "DSH updated."
 }
 
 cmd_dsh_version() {
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+        log_error "Workstation is not running. Run: aiws start"
+        return 1
+    fi
+
     docker exec -e NARB_DISABLE_NATIVE_CACHE=1 aiws-cli \
         node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js \
         --version
@@ -1663,7 +1712,11 @@ cmd_daemon() {
 
     case "$action" in
         start)
-            if ! is_daemon_running; then
+            if has_daemon_systemd; then
+                if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                    log_warn "Daemon is already running."
+                    return 0
+                fi
                 # Ensure port 8000 is strictly free before attempting to start
                 if command -v lsof >/dev/null 2>&1; then
                     local port_pids
@@ -1680,59 +1733,76 @@ cmd_daemon() {
                         sudo kill -9 $port_pids 2>/dev/null || true
                     fi
                 fi
-            fi
-            
-            if has_daemon_systemd; then
                 sudo systemctl start "$service_name"
                 if systemctl is-active --quiet "$service_name" 2>/dev/null; then
-                    echo "✓ Daemon running via systemd on http://127.0.0.1:8000"
+                    log_success "Daemon running via systemd on http://127.0.0.1:8000"
                     return 0
                 fi
-                echo "✗ Failed to start daemon via systemd. Check: journalctl -xeu aiws-daemon"
+                log_error "Failed to start daemon via systemd. Check: journalctl -xeu aiws-daemon"
                 return 1
             fi
             if is_daemon_running; then
-                echo "Daemon already running."
+                log_warn "Daemon is already running."
                 return 0
             fi
-            echo "Starting AIWS Host Control Daemon..."
+            if command -v lsof >/dev/null 2>&1; then
+                local port_pids
+                port_pids=$(sudo lsof -t -i:8000 2>/dev/null || true)
+                if [[ -n "$port_pids" ]]; then
+                    sudo kill -9 $port_pids 2>/dev/null || true
+                fi
+            elif command -v fuser >/dev/null 2>&1; then
+                sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
+            elif command -v ss >/dev/null 2>&1; then
+                local port_pids
+                port_pids=$(sudo ss -lptn 'sport = :8000' 2>/dev/null | grep -o 'pid=[0-9]*' | awk -F= '{print $2}' | sort -u)
+                if [[ -n "$port_pids" ]]; then
+                    sudo kill -9 $port_pids 2>/dev/null || true
+                fi
+            fi
+            log_info "Starting AIWS Host Control Daemon..."
             mkdir -p "$RUNTIME_DIR"
             python3 "$daemon_script" >> "$daemon_log_file" 2>&1 &
             echo $! > "$daemon_pid_file"
             sleep 0.3
             if is_daemon_running; then
-                echo "✓ Daemon started (PID: $(<"$daemon_pid_file")) on http://127.0.0.1:8000"
+                log_success "Daemon started (PID: $(<"$daemon_pid_file")) on http://127.0.0.1:8000"
             else
-                echo "ERROR: Daemon failed to start. Check $daemon_log_file" >&2
+                log_error "Daemon failed to start. Check $daemon_log_file"
                 rm -f "$daemon_pid_file"
                 return 1
             fi
             ;;
         stop)
             if has_daemon_systemd; then
+                if ! systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                    log_warn "Daemon is already stopped."
+                    return 0
+                fi
                 sudo systemctl stop "$service_name"
-                echo "✓ Daemon stopped via systemd."
+                log_success "Daemon stopped via systemd."
                 return 0
             fi
             if [[ -f "$daemon_pid_file" ]]; then
                 local pid
                 pid="$(<"$daemon_pid_file")"
                 if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-                    echo "Stopping Daemon (PID: $pid)..."
+                    log_info "Stopping Daemon (PID: $pid)..."
                     kill -TERM "$pid" 2>/dev/null || true
                     sleep 0.3
                     kill -9 "$pid" 2>/dev/null || true
+                    rm -f "$daemon_pid_file"
+                    log_success "Daemon stopped."
+                    return 0
                 fi
                 rm -f "$daemon_pid_file"
-                echo "✓ Daemon stopped."
-            else
-                echo "Daemon is not running."
             fi
+            log_warn "Daemon is already stopped."
             ;;
         restart)
             if has_daemon_systemd; then
                 sudo systemctl restart "$service_name"
-                echo "✓ Daemon restarted via systemd on http://127.0.0.1:8000"
+                log_success "Daemon restarted via systemd on http://127.0.0.1:8000"
                 return 0
             fi
             cmd_daemon stop
@@ -2371,11 +2441,15 @@ cmd_tui() {
             0)
                 while true; do
                     local ws_opts=(
-                        "Start / Restart Workstation"
-                        "Stop Workstation"
-                        "Check Status (aiws status)"
-                        "View Logs (aiws logs)"
+                        "Start Workstation (aiws start)"
+                        "Restart Workstation (aiws restart)"
+                        "Stop Workstation (aiws stop)"
+                        "Workstation Status (aiws status)"
+                        "Workstation Logs (aiws logs)"
                         "Run Dev Server (aiws run)"
+                        "Stop Dev Server (aiws app stop)"
+                        "Restart Dev Server (aiws app restart)"
+                        "Dev Server Logs (aiws app logs)"
                         "Preview URLs & Ports (aiws preview)"
                         "Open Container Shell (aiws shell)"
                         "Back to Main Menu"
@@ -2383,16 +2457,20 @@ cmd_tui() {
                     clear; print_aiws_banner; echo
                     local w_choice=0
                     render_menu "Workstation Operations" "${ws_opts[@]}" || w_choice=$?
-                    if [[ "$w_choice" -eq 255 || "$w_choice" -eq 7 ]]; then break; fi
+                    if [[ "$w_choice" -eq 255 || "$w_choice" -eq 11 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$w_choice" in
                         0) run_tui_cmd cmd_start; load_env 2>/dev/null || true; redraw_banner ;;
-                        1) run_tui_cmd cmd_stop; load_env 2>/dev/null || true; redraw_banner ;;
-                        2) run_tui_cmd cmd_status ;;
-                        3) run_tui_cmd cmd_logs ;;
-                        4) run_tui_cmd cmd_run ;;
-                        5) run_tui_cmd cmd_preview ;;
-                        6) run_tui_cmd cmd_shell ;;
+                        1) run_tui_cmd cmd_restart; load_env 2>/dev/null || true; redraw_banner ;;
+                        2) run_tui_cmd cmd_stop; load_env 2>/dev/null || true; redraw_banner ;;
+                        3) run_tui_cmd cmd_status ;;
+                        4) run_tui_cmd cmd_logs ;;
+                        5) run_tui_cmd cmd_run ;;
+                        6) run_tui_cmd cmd_app_stop ;;
+                        7) run_tui_cmd cmd_app_restart ;;
+                        8) run_tui_cmd cmd_app_logs ;;
+                        9) run_tui_cmd cmd_preview ;;
+                        10) run_tui_cmd cmd_shell ;;
                     esac
                     prompt_return
                 done
@@ -2520,6 +2598,7 @@ cmd_tui() {
                         "Tunnel Status (aiws tunnel status)"
                         "Start Tunnel (aiws tunnel start)"
                         "Stop Tunnel (aiws tunnel stop)"
+                        "Restart Tunnel (aiws tunnel restart)"
                         "Sync Port (aiws tunnel sync)"
                         "Setup Tunnel Credentials (aiws tunnel setup)"
                         "View Tunnel Logs (aiws tunnel logs)"
@@ -2528,7 +2607,7 @@ cmd_tui() {
                     clear; print_aiws_banner; echo
                     local t_choice=0
                     render_menu "Cloudflare Edge Tunnel" "${tunnel_opts[@]}" || t_choice=$?
-                    if [[ "$t_choice" -eq 255 || "$t_choice" -eq 6 ]]; then break; fi
+                    if [[ "$t_choice" -eq 255 || "$t_choice" -eq 7 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     if [[ ! -f "$TUNNEL_LIB" ]]; then
                         echo "Tunnel module missing at $TUNNEL_LIB"
@@ -2539,13 +2618,14 @@ cmd_tui() {
                         0) run_tui_cmd bash "$TUNNEL_LIB" status ;;
                         1) run_tui_cmd bash "$TUNNEL_LIB" start && load_env 2>/dev/null || true; redraw_banner ;;
                         2) run_tui_cmd bash "$TUNNEL_LIB" stop && load_env 2>/dev/null || true; redraw_banner ;;
-                        3)
+                        3) run_tui_cmd bash "$TUNNEL_LIB" restart && load_env 2>/dev/null || true; redraw_banner ;;
+                        4)
                             local sync_p
                             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter port to forward (default: 3000): "; read -r sync_p || true
                             run_tui_cmd bash "$TUNNEL_LIB" sync "${sync_p:-3000}"
                             ;;
-                        4) run_tui_cmd bash "$TUNNEL_LIB" setup && load_env 2>/dev/null || true; redraw_banner ;;
-                        5) run_tui_cmd bash "$TUNNEL_LIB" logs ;;
+                        5) run_tui_cmd bash "$TUNNEL_LIB" setup && load_env 2>/dev/null || true; redraw_banner ;;
+                        6) run_tui_cmd bash "$TUNNEL_LIB" logs ;;
                     esac
                     prompt_return
                 done
@@ -2774,11 +2854,11 @@ case "${1:-}" in
         [[ -f "$TUNNEL_LIB" ]] ||
             die "Tunnel module not found: $TUNNEL_LIB"
         case "${1:-}" in
-            setup|sync|status|start|stop|logs)
+            setup|sync|status|start|stop|restart|logs)
                 bash "$TUNNEL_LIB" "$@"
                 ;;
             *)
-                die "Usage: aiws tunnel {setup|sync [port]|status|start|stop|logs}"
+                die "Usage: aiws tunnel {setup|sync [port]|status|start|stop|restart|logs}"
                 ;;
         esac
         ;;
