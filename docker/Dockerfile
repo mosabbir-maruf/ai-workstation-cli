@@ -28,7 +28,8 @@ RUN useradd \
     --create-home \
     --shell /bin/bash \
     --uid 1001 \
-    sandbox
+    sandbox \
+    && echo 'PS1="\[\033[1;36m\]\u\[\033[1;30m\]@\[\033[1;36m\]aiws\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ "' >> /home/sandbox/.bashrc
 
 RUN mkdir -p \
         /home/sandbox/.npm-global \
