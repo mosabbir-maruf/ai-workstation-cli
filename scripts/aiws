@@ -1986,18 +1986,18 @@ render_menu() {
         if [[ "$key" == $'\x1b' ]]; then
             read -rsn2 -t 0.1 key || true
             if [[ "$key" == "[A" || "$key" == "A" || "$key" == "OA" ]]; then
-                ((selected--))
-                [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
+                selected=$((selected - 1))
+                [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
             elif [[ "$key" == "[B" || "$key" == "B" || "$key" == "OB" ]]; then
-                ((selected++))
-                [[ "$selected" -ge ${#options[@]} ]] && selected=0
+                selected=$((selected + 1))
+                [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
             fi
         elif [[ "$key" == "k" || "$key" == "w" || "$key" == "W" || "$key" == "K" ]]; then
-            ((selected--))
-            [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
+            selected=$((selected - 1))
+            [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
         elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
-            ((selected++))
-            [[ "$selected" -ge ${#options[@]} ]] && selected=0
+            selected=$((selected + 1))
+            [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
         elif [[ "$key" == "q" || "$key" == "Q" ]]; then
             tput cnorm
             tput rc
