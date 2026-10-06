@@ -1788,7 +1788,7 @@ cmd_setup() {
         for res in "${step_results[@]}"; do
             echo -e "$res"
         done
-        [[ ${#step_results[@]} -gt 0 ]] && echo
+        [[ ${#step_results[@]} -gt 0 ]] && echo || true
     }
 
     print_setup_header
