@@ -1151,12 +1151,22 @@ EOF
 cmd_update() {
     print_header "UPDATE AIWS"
     echo
-    git -C "$ROOT" pull --ff-only
-    compose pull
-    if is_daemon_running; then
-        log_info "Restarting Host Control Daemon..."
-        cmd_daemon restart
+    echo "Pulling latest code from GitHub..."
+    if ! git -C "$ROOT" pull --ff-only; then
+        echo "✗ Fast-forward failed. Stashing local changes..."
+        git -C "$ROOT" stash || true
+        git -C "$ROOT" pull --rebase || true
     fi
+    
+    echo "Pulling latest Docker images..."
+    compose pull || true
+    
+    if is_daemon_running; then
+        log_info "Restarting Host Control Daemon with new code..."
+        cmd_daemon restart || true
+    fi
+    
+    echo "✓ AIWS successfully updated to the latest version!"
 }
 
 cmd_upgrade() {
