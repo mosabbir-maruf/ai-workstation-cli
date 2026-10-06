@@ -48,6 +48,19 @@ prompt_return() {
 
 export -f print_header
 
+is_workstation_running() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -qx aiws-cli
+}
+
+get_projects_array() {
+    local -n _out_arr="$1"
+    _out_arr=()
+    local p
+    for p in "$PROJECTS_DIR"/*; do
+        [[ -d "$p/.git" ]] && _out_arr+=("${p##*/}")
+    done
+}
+
 log_info() {
     echo -e "\033[90m[\033[36mi\033[90m]\033[0m $1"
 }
@@ -280,9 +293,7 @@ cmd_use() {
     fi
 
     local workstation_running=0
-
-    if docker ps --format '{{.Names}}' |
-       grep -qx aiws-cli; then
+    if is_workstation_running; then
         workstation_running=1
     fi
 
@@ -383,7 +394,7 @@ harness_exec() {
 }
 
 cmd_harness_start() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -392,7 +403,7 @@ cmd_harness_start() {
 }
 
 cmd_harness_stop() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_warn "Workstation is not running (Harness is already stopped)."
         return 0
     fi
@@ -401,7 +412,7 @@ cmd_harness_stop() {
 }
 
 cmd_harness_restart() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -410,7 +421,7 @@ cmd_harness_restart() {
 }
 
 cmd_harness_sync() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -419,7 +430,7 @@ cmd_harness_sync() {
 }
 
 cmd_harness_status() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_info "Workstation is not running (Harness is stopped)."
         return 0
     fi
@@ -432,7 +443,7 @@ cmd_start() {
     echo
     require_active
 
-    if docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if is_workstation_running; then
         log_warn "Workstation is already running."
         echo -e "Use '\033[1maiws restart\033[0m' if you want to restart it."
         return 0
@@ -458,7 +469,7 @@ cmd_start() {
 
     # Wait up to 30 seconds for the container to become running
     local attempts=0
-    while ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; do
+    while ! is_workstation_running; do
         sleep 1
         attempts=$((attempts + 1))
         if [[ "$attempts" -ge 30 ]]; then
@@ -474,7 +485,7 @@ cmd_start() {
 cmd_stop() {
     print_header "STOP WORKSTATION"
     echo
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_warn "Workstation is already stopped."
         rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
         return 0
@@ -491,7 +502,7 @@ cmd_restart() {
     echo
     require_active
 
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_info "Workstation is not running. Starting..."
         cmd_start
         return 0
@@ -503,6 +514,7 @@ cmd_restart() {
 }
 
 app_container_pid() {
+    is_workstation_running || return 1
     local pid=""
     if [[ -f "$APP_PID_FILE" ]]; then
         pid="$(<"$APP_PID_FILE")"
@@ -614,7 +626,7 @@ cmd_run() {
     require_active
     load_env
 
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -755,8 +767,7 @@ cmd_run() {
 }
 
 cmd_app_stop() {
-    if ! docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_warn "Workstation is not running (Project is already stopped)."
         return 0
     fi
@@ -848,7 +859,7 @@ cmd_app_status() {
 }
 
 cmd_app_logs() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running."
         return 1
     fi
@@ -874,7 +885,7 @@ cmd_status() {
     echo -e "\033[90mProject  :\033[0m ${ACTIVE_PROJECT:-none}"
     echo -e "\033[90mPath     :\033[0m ${ACTIVE_PROJECT_PATH:-none}"
 
-    if docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if is_workstation_running; then
         echo -e "\033[90mContainer:\033[0m \033[36mrunning\033[0m"
         harness_exec status || true
     else
@@ -902,7 +913,7 @@ cmd_logs() {
 
 cmd_shell() {
     require_active
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -965,10 +976,10 @@ cmd_preview() {
     echo
     echo "Project: $ACTIVE_PROJECT"
 
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         echo "Workstation: stopped"
-        echo "Run: ./scripts/aiws start"
-        return 1
+        echo "Run: aiws start"
+        return 0
     fi
 
     echo "Workstation: running"
@@ -1040,7 +1051,7 @@ cmd_preview() {
 cmd_dsh_update() {
     require_active
 
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -1065,7 +1076,7 @@ cmd_dsh_update() {
 }
 
 cmd_dsh_version() {
-    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
+    if ! is_workstation_running; then
         log_error "Workstation is not running. Run: aiws start"
         return 1
     fi
@@ -1140,8 +1151,7 @@ EOF
         echo "WARNING: --deps will remove node_modules from all projects."
         echo
 
-        if docker ps --format '{{.Names}}' |
-            grep -qx aiws-cli; then
+        if is_workstation_running; then
             echo "WARNING: aiws-cli is currently running."
             echo "The active app may stop working until dependencies are reinstalled."
             echo
@@ -1165,8 +1175,7 @@ EOF
     echo
     echo; print_header "CLEANING NPM CACHE"
 
-    if docker ps --format '{{.Names}}' |
-        grep -qx aiws-cli; then
+    if is_workstation_running; then
         docker exec aiws-cli npm cache clean --force
     else
         echo "Workstation is not running; npm cache cleanup skipped."
@@ -1306,8 +1315,7 @@ cmd_doctor() {
     echo
     echo; print_header "WORKSTATION"
 
-    if docker ps --format '{{.Names}}' |
-       grep -qx aiws-cli; then
+    if is_workstation_running; then
         container_id="$(docker ps -q -f name=^aiws-cli$)"
         container_status="$(docker inspect -f '{{.State.Status}}' "$container_id")"
         image="$(docker inspect -f '{{.Config.Image}}' "$container_id")"
@@ -1703,6 +1711,24 @@ is_daemon_running() {
     return 1
 }
 
+free_daemon_port() {
+    if command -v lsof >/dev/null 2>&1; then
+        local port_pids
+        port_pids=$(sudo lsof -t -i:8000 2>/dev/null || true)
+        if [[ -n "$port_pids" ]]; then
+            sudo kill -9 $port_pids 2>/dev/null || true
+        fi
+    elif command -v fuser >/dev/null 2>&1; then
+        sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
+    elif command -v ss >/dev/null 2>&1; then
+        local port_pids
+        port_pids=$(sudo ss -lptn 'sport = :8000' 2>/dev/null | grep -o 'pid=[0-9]*' | awk -F= '{print $2}' | sort -u)
+        if [[ -n "$port_pids" ]]; then
+            sudo kill -9 $port_pids 2>/dev/null || true
+        fi
+    fi
+}
+
 cmd_daemon() {
     local action="${1:-status}"
     local daemon_script="$ROOT/daemon/server.py"
@@ -1717,22 +1743,7 @@ cmd_daemon() {
                     log_warn "Daemon is already running."
                     return 0
                 fi
-                # Ensure port 8000 is strictly free before attempting to start
-                if command -v lsof >/dev/null 2>&1; then
-                    local port_pids
-                    port_pids=$(sudo lsof -t -i:8000 2>/dev/null || true)
-                    if [[ -n "$port_pids" ]]; then
-                        sudo kill -9 $port_pids 2>/dev/null || true
-                    fi
-                elif command -v fuser >/dev/null 2>&1; then
-                    sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
-                elif command -v ss >/dev/null 2>&1; then
-                    local port_pids
-                    port_pids=$(sudo ss -lptn 'sport = :8000' 2>/dev/null | grep -o 'pid=[0-9]*' | awk -F= '{print $2}' | sort -u)
-                    if [[ -n "$port_pids" ]]; then
-                        sudo kill -9 $port_pids 2>/dev/null || true
-                    fi
-                fi
+                free_daemon_port
                 sudo systemctl start "$service_name"
                 if systemctl is-active --quiet "$service_name" 2>/dev/null; then
                     log_success "Daemon running via systemd on http://127.0.0.1:8000"
@@ -1745,21 +1756,7 @@ cmd_daemon() {
                 log_warn "Daemon is already running."
                 return 0
             fi
-            if command -v lsof >/dev/null 2>&1; then
-                local port_pids
-                port_pids=$(sudo lsof -t -i:8000 2>/dev/null || true)
-                if [[ -n "$port_pids" ]]; then
-                    sudo kill -9 $port_pids 2>/dev/null || true
-                fi
-            elif command -v fuser >/dev/null 2>&1; then
-                sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
-            elif command -v ss >/dev/null 2>&1; then
-                local port_pids
-                port_pids=$(sudo ss -lptn 'sport = :8000' 2>/dev/null | grep -o 'pid=[0-9]*' | awk -F= '{print $2}' | sort -u)
-                if [[ -n "$port_pids" ]]; then
-                    sudo kill -9 $port_pids 2>/dev/null || true
-                fi
-            fi
+            free_daemon_port
             log_info "Starting AIWS Host Control Daemon..."
             mkdir -p "$RUNTIME_DIR"
             python3 "$daemon_script" >> "$daemon_log_file" 2>&1 &
@@ -2497,11 +2494,7 @@ cmd_tui() {
                         0) run_tui_cmd cmd_list ;;
                         1)
                             local existing_projects=()
-                            for p in "$PROJECTS_DIR"/*; do
-                                if [[ -d "$p/.git" ]]; then
-                                    existing_projects+=("$(basename "$p")")
-                                fi
-                            done
+                            get_projects_array existing_projects
                             if [[ ${#existing_projects[@]} -eq 0 ]]; then
                                 echo -e "\033[33mNo projects found in $PROJECTS_DIR. Use 'Add Project' first.\033[0m"
                             else
@@ -2527,11 +2520,7 @@ cmd_tui() {
                             ;;
                         3)
                             local existing_projects=()
-                            for p in "$PROJECTS_DIR"/*; do
-                                if [[ -d "$p/.git" ]]; then
-                                    existing_projects+=("$(basename "$p")")
-                                fi
-                            done
+                            get_projects_array existing_projects
                             if [[ ${#existing_projects[@]} -eq 0 ]]; then
                                 echo -e "\033[33mNo projects found to remove.\033[0m"
                             else
