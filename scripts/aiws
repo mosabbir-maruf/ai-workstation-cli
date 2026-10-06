@@ -29,8 +29,20 @@ PORTS_LIB="$ROOT/scripts/lib/ports.sh"
 
 mkdir -p "$PROJECTS_DIR" "$RUNTIME_DIR" "$HARNESS_RUNTIME_DIR" "$APP_RUNTIME_DIR"
 
+log_info() {
+    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m $1"
+}
+
+log_success() {
+    echo -e "  \033[90m[\033[32m✓\033[90m]\033[0m $1"
+}
+
+log_error() {
+    echo -e "  \033[90m[\033[31m✗\033[90m]\033[0m $1" >&2
+}
+
 die() {
-    echo "ERROR: $*" >&2
+    log_error "$*"
     exit 1
 }
 
@@ -191,7 +203,7 @@ cmd_remove() {
     load_env
 
     if [[ "${ACTIVE_PROJECT:-}" == "$name" ]]; then
-        echo "Stopping workstation..."
+        log_info "Stopping workstation..."
 
         compose down >/dev/null 2>&1 || true
 
@@ -383,7 +395,7 @@ cmd_harness_status() {
     docker ps --format '{{.Names}}' |
         grep -qx aiws-cli ||
         {
-            echo "Harness: stopped (workstation is not running)"
+            log_info "Harness is already stopped."
             return 0
         }
 
@@ -423,7 +435,7 @@ cmd_start() {
 
     cmd_harness_start
 
-    echo "Workstation started."
+    log_success "Workstation started."
 }
 
 cmd_stop() {
@@ -431,7 +443,7 @@ cmd_stop() {
     cmd_harness_stop || true
     compose down
     rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
-    echo "Workstation stopped."
+    log_success "Workstation stopped."
 }
 
 cmd_restart() {
@@ -685,7 +697,7 @@ cmd_run() {
         return 1
     fi
 
-    echo "Project started."
+    log_success "Project started."
     echo "PID: $(app_container_pid)"
     echo "Logs: aiws app logs"
 }
@@ -745,7 +757,7 @@ cmd_app_stop() {
     rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
     : > "$APP_RUNTIME_DIR/app.log" 2>/dev/null || true
 
-    echo "Project stopped."
+    log_success "Project stopped."
 }
 cmd_app_restart() {
     require_active
@@ -1103,7 +1115,7 @@ cmd_update() {
     git -C "$ROOT" pull --ff-only
     compose pull
     if is_daemon_running; then
-        echo "Restarting Host Control Daemon..."
+        log_info "Restarting Host Control Daemon..."
         cmd_daemon restart
     fi
 }
@@ -1513,7 +1525,7 @@ cmd_state_import() {
     echo "✓ Current state backed up"
 
     echo
-    echo "Stopping workstation..."
+    log_info "Stopping workstation..."
 
     compose down >/dev/null 2>&1 || true
 
