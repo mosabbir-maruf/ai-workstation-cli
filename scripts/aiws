@@ -1163,7 +1163,9 @@ cmd_update() {
     
     if is_daemon_running; then
         log_info "Restarting Host Control Daemon with new code..."
-        cmd_daemon restart || true
+        # Run detached so the HTTP response can finish before the daemon kills itself
+        ( sleep 1; cmd_daemon restart >/dev/null 2>&1 ) &
+        disown 2>/dev/null || true
     fi
     
     echo "✓ AIWS successfully updated to the latest version!"
