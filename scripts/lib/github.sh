@@ -259,7 +259,7 @@ github_setup() {
             die "Invalid Installation ID."
 
         echo
-        read -r -p "Private key (.pem) path: " pem_input
+        echo -e -n "  \033[90mPrivate Key (.pem) Path :\033[0m "; read -r pem_input
     fi
 
     [[ "$app_id" =~ ^[0-9]+$ ]] ||
