@@ -414,6 +414,8 @@ cmd_harness_status() {
 }
 
 cmd_start() {
+    print_header "START WORKSTATION"
+    echo
     require_active
 
     mkdir -p \
@@ -450,6 +452,8 @@ cmd_start() {
 }
 
 cmd_stop() {
+    print_header "STOP WORKSTATION"
+    echo
     cmd_app_stop || true
     cmd_harness_stop || true
     compose down
@@ -458,6 +462,8 @@ cmd_stop() {
 }
 
 cmd_restart() {
+    print_header "RESTART WORKSTATION"
+    echo
     compose restart
     cmd_harness_start
 }
@@ -1135,6 +1141,8 @@ EOF
 }
 
 cmd_update() {
+    print_header "UPDATE AIWS"
+    echo
     git -C "$ROOT" pull --ff-only
     compose pull
     if is_daemon_running; then
@@ -1150,6 +1158,8 @@ cmd_upgrade() {
 }
 
 cmd_uninstall() {
+    print_header "UNINSTALL AIWS"
+    echo
     if [[ -f "$ROOT/uninstall.sh" ]]; then
         bash "$ROOT/uninstall.sh" "$@"
     else
