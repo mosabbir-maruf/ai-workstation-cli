@@ -1784,7 +1784,7 @@ cmd_setup() {
     print_setup_header() {
         clear
         print_header "SETUP & CONFIGURATION"
-        echo -e "\033[90mWalk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].\033[0m"
+        echo -e "\033[90mWalk through 5 quick steps to configure your workstation. Navigate with arrow keys.\033[0m"
         echo
         for res in "${step_results[@]}"; do
             echo -e "$res"
@@ -1792,37 +1792,35 @@ cmd_setup() {
         [[ ${#step_results[@]} -gt 0 ]] && echo || true
     }
 
-    print_setup_header
-
     # ------------------------------------------------------------------
     # STEP 1/5: Host Control Daemon & API Security Key
     # ------------------------------------------------------------------
+    print_setup_header
     local current_key="${WORKSTATION_API_KEY:-}"
-
-    echo -e "\033[1m[Step 1/5] Host Control Daemon & API Key\033[0m"
-    echo -e "\033[90mSecures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard.\033[0m"
+    local s1_prompt="\033[1m[Step 1/5] Host Control Daemon & API Key\033[0m\n\033[90mSecures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard.\033[0m\n"
     if [[ -n "$current_key" ]]; then
-        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured${_C_RESET} (${current_key:0:6}••••••••)\033[0m"
+        s1_prompt+="\033[90mCurrent status: ${_C_GREEN}Configured${_C_RESET} (${current_key:0:6}••••••••)\033[0m"
     else
-        echo -e "\033[90mCurrent status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}\033[0m"
+        s1_prompt+="\033[90mCurrent status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}\033[0m"
     fi
-    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Auto-generate a secure 32-byte API key (Recommended)\033[0m"
-    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Enter a custom API key\033[0m"
-    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
-    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: s): "; read -r step1_choice || true
+    local s1_opts=("Auto-generate a secure 32-byte API key (Recommended)" "Enter a custom API key" "Skip this step")
+    local s1_choice=2
+    render_menu "$s1_prompt" "${s1_opts[@]}" || s1_choice=$?
+    
+    if [[ "$s1_choice" -eq 255 ]]; then return 0; fi
 
-    case "${step1_choice:-s}" in
-        1)
+    case "$s1_choice" in
+        0)
             local gen_key
             gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
             set_env_var "WORKSTATION_API_KEY" "$gen_key"
             cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
             step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mAPI Key Generated:\033[0m ${gen_key}")
             ;;
-        2)
+        1)
+            tput cnorm
             local custom_key
-            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter custom WORKSTATION_API_KEY: "; read -r custom_key || true
+            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter custom WORKSTATION_API_KEY: "; read -r custom_key || true
             if [[ -n "$custom_key" ]]; then
                 set_env_var "WORKSTATION_API_KEY" "$custom_key"
                 cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
@@ -1830,285 +1828,181 @@ cmd_setup() {
             else
                 step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 1: Empty input, skipped\033[0m")
             fi
+            tput civis
             ;;
-        q|Q) return 0 ;;
-
-        *)
+        2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 1: Skipped\033[0m")
             ;;
     esac
-    echo
 
+    # ------------------------------------------------------------------
+    # STEP 2/5: GitHub App Integration
+    # ------------------------------------------------------------------
     print_setup_header
-
-    # ------------------------------------------------------------------
-    # STEP 2/5: GitHub App Credential Broker
-    # ------------------------------------------------------------------
-    echo -e "\033[1m[Step 2/5] GitHub App Integration (Zero-PAT Broker)\033[0m"
-    echo -e "\033[90mEnables private repository cloning, pulling & pushing without storing personal tokens.\033[0m"
-    if [[ -n "${GITHUB_APP_ID:-}" && -f "$ROOT/secrets/github-app.pem" ]]; then
-        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured (App ID: ${GITHUB_APP_ID}, Installation: ${GITHUB_INSTALLATION_ID:-unset})${_C_RESET}\033[0m"
+    local s2_prompt="\033[1m[Step 2/5] GitHub App Integration (Zero-PAT Broker)\033[0m\n\033[90mEnables private repository cloning, pulling & pushing without storing personal tokens.\033[0m\n"
+    if [[ -n "${GITHUB_APP_ID:-}" && -n "${GITHUB_INSTALLATION_ID:-}" ]]; then
+        s2_prompt+="\033[90mCurrent status: ${_C_GREEN}Configured${_C_RESET} (App ID: ${GITHUB_APP_ID}, Installation: ${GITHUB_INSTALLATION_ID})\033[0m"
     else
-        echo -e "\033[90mCurrent status: ${_C_YELLOW}Not configured${_C_RESET}\033[0m"
+        s2_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured${_C_RESET}\033[0m"
     fi
-    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)\033[0m"
-    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws github setup' anytime later)\033[0m"
-    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s/q] (default: s): "; read -r step2_choice || true
+    local s2_opts=("Configure GitHub App (App ID, Installation ID, .pem key)" "Skip this step (run 'aiws github setup' anytime later)")
+    local s2_choice=1
+    render_menu "$s2_prompt" "${s2_opts[@]}" || s2_choice=$?
 
-    case "${step2_choice:-s}" in
-        1)
+    if [[ "$s2_choice" -eq 255 ]]; then return 0; fi
+
+    case "$s2_choice" in
+        0)
+            tput cnorm
             cmd_github setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
+            if [[ -n "${GITHUB_APP_ID:-}" && -n "${GITHUB_INSTALLATION_ID:-}" ]]; then
+                step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mGitHub App Configured\033[0m")
+            else
+                step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub Setup Incomplete\033[0m")
+            fi
+            tput civis
             ;;
-        q|Q) return 0 ;;
-
-        *)
+        1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 2: Skipped\033[0m")
             ;;
     esac
-    echo
 
+    # ------------------------------------------------------------------
+    # STEP 3/5: Cloudflare Tunnel
+    # ------------------------------------------------------------------
     print_setup_header
-
-    # ------------------------------------------------------------------
-    # STEP 3/5: Cloudflare Zero-Trust Tunnel (Anywhere Access)
-    # ------------------------------------------------------------------
-    echo -e "\033[1m[Step 3/5] Cloudflare Tunnel (Anywhere Access)\033[0m"
-    echo -e "\033[90mPublishes your App Preview, DSH Agent Web UI & Host API securely over custom domains.\033[0m"
-    if [[ "${CLOUDFLARED_TOKEN_SET:-}" == "1" ]]; then
-        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured (App: ${CLOUDFLARED_APP_HOSTNAME:-none}, DSH: ${CLOUDFLARED_DSH_HOSTNAME:-none})${_C_RESET}\033[0m"
+    local s3_prompt="\033[1m[Step 3/5] Cloudflare Tunnel (Anywhere Access)\033[0m\n\033[90mPublishes your App Preview, DSH Agent Web UI & Host API securely over custom domains.\033[0m\n"
+    if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+        s3_prompt+="\033[90mCurrent status: ${_C_GREEN}Configured${_C_RESET} (App: ${TUNNEL_APP_HOSTNAME:-}, DSH: ${TUNNEL_DSH_HOSTNAME:-})\033[0m"
     else
-        echo -e "\033[90mCurrent status: ${_C_YELLOW}Local-only mode (no tunnel configured)${_C_RESET}\033[0m"
+        s3_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured (local access only)${_C_RESET}\033[0m"
     fi
-    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames\033[0m"
-    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws tunnel setup' anytime later)\033[0m"
-    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s/q] (default: s): "; read -r step3_choice || true
+    local s3_opts=("Configure Cloudflare Tunnel token & hostnames" "Skip this step (run 'aiws tunnel setup' anytime later)")
+    local s3_choice=1
+    render_menu "$s3_prompt" "${s3_opts[@]}" || s3_choice=$?
 
-    case "${step3_choice:-s}" in
-        1)
+    if [[ "$s3_choice" -eq 255 ]]; then return 0; fi
+
+    case "$s3_choice" in
+        0)
+            tput cnorm
             if [[ -f "$TUNNEL_LIB" ]]; then
-                bash "$TUNNEL_LIB" setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mTunnel setup incomplete — retry anytime with: aiws tunnel setup${_C_RESET}"
+                bash "$TUNNEL_LIB" setup && load_env
+                if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+                    step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCloudflare Tunnel Configured\033[0m")
+                else
+                    step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mTunnel Setup Incomplete\033[0m")
+                fi
+            else
+                echo "Tunnel library not found."
+                step_results+=("\033[90m[\033[31m✗\033[90m]\033[0m \033[31mTunnel library missing\033[0m")
             fi
+            tput civis
             ;;
-        q|Q) return 0 ;;
-
-        *)
+        1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 3: Skipped\033[0m")
             ;;
     esac
-    echo
 
+    # ------------------------------------------------------------------
+    # STEP 4/5: Workspace Project Onboarding
+    # ------------------------------------------------------------------
     print_setup_header
-
-    # ------------------------------------------------------------------
-    # STEP 4/5: First Project Workspace (aiws add / aiws use)
-    # ------------------------------------------------------------------
-    echo -e "\033[1m[Step 4/5] Workspace Project Onboarding\033[0m"
-    echo -e "\033[90mClone a GitHub repository into ~/projects and mount it as your active /workspace.\033[0m"
+    local s4_prompt="\033[1m[Step 4/5] Workspace Project Onboarding\033[0m\n\033[90mClone a GitHub repository into ~/projects and mount it as your active /workspace.\033[0m\n"
     if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
-        echo -e "\033[90mCurrent active project: ${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET} (${ACTIVE_PROJECT_PATH:-})\033[0m"
+        s4_prompt+="\033[90mCurrent active project: ${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET} (${PROJECTS_DIR}/${ACTIVE_PROJECT})\033[0m"
     else
-        echo -e "\033[90mCurrent active project: ${_C_YELLOW}None selected${_C_RESET}\033[0m"
+        s4_prompt+="\033[90mCurrent active project: ${_C_YELLOW}None${_C_RESET}\033[0m"
     fi
-    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it\033[0m"
-    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects\033[0m"
-    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)\033[0m"
-    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: s): "; read -r step4_choice || true
+    local s4_opts=("Clone a GitHub repository URL and activate it" "Select an existing project from ~/projects" "Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)")
+    local s4_choice=2
+    render_menu "$s4_prompt" "${s4_opts[@]}" || s4_choice=$?
 
-    case "${step4_choice:-s}" in
-        1)
-            local repo_url repo_name
-            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m GitHub HTTPS URL (e.g. https://github.com/org/repo): " repo_url || true
+    if [[ "$s4_choice" -eq 255 ]]; then return 0; fi
+
+    case "$s4_choice" in
+        0)
+            tput cnorm
+            local repo_url
+            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter GitHub URL to clone: "; read -r repo_url || true
             if [[ -n "$repo_url" ]]; then
-                repo_name="${repo_url%/}"
-                repo_name="${repo_name##*/}"
-                repo_name="${repo_name%.git}"
-                if cmd_add "$repo_url"; then
-                    cmd_use "$repo_name" || true
-                fi
+                cmd_add "$repo_url"
+                load_env 2>/dev/null || true
+                step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mCloned & Activated Project:\033[0m ${ACTIVE_PROJECT:-$repo_url}")
             else
-                echo -e "\033[90m[\033[33m↷\033[90m]\033[0m \033[90mNo URL provided — skipped.${_C_RESET}"
+                step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 4: Empty URL, skipped\033[0m")
             fi
+            tput civis
+            ;;
+        1)
+            tput cnorm
+            local existing_projects=()
+            for p in "$PROJECTS_DIR"/*; do
+                if [[ -d "$p" && ! -L "$p" ]]; then
+                    existing_projects+=("$(basename "$p")")
+                fi
+            done
+            if [[ ${#existing_projects[@]} -eq 0 ]]; then
+                echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mNo existing projects found in $PROJECTS_DIR\033[0m"
+                step_results+=("\033[90m[\033[33m↷\033[90m]\033[0m \033[90mStep 4: No existing projects found\033[0m")
+            else
+                echo -e "\n\033[1mSelect a project to set as active:\033[0m"
+                select p_name in "${existing_projects[@]}"; do
+                    if [[ -n "$p_name" ]]; then
+                        cmd_use "$p_name"
+                        load_env 2>/dev/null || true
+                        step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mActivated Project:\033[0m ${p_name}")
+                        break
+                    else
+                        echo "Invalid selection"
+                    fi
+                done
+            fi
+            tput civis
             ;;
         2)
-            echo -e "\033[90mAvailable projects:\033[0m"
-            ls -1 "$PROJECTS_DIR" 2>/dev/null | awk \'{print "  " $0}\' || true
-            local chosen_proj
-            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter project name to activate: "; read -r chosen_proj || true
-            if [[ -n "$chosen_proj" ]]; then
-                cmd_use "$chosen_proj" >/dev/null 2>&1 && step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mProject Activated:\033[0m $chosen_proj") || step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mProject Activation Failed\033[0m")
-            fi
-            ;;
-        q|Q) return 0 ;;
-
-        *)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 4: Skipped\033[0m")
             ;;
     esac
-    echo
 
+    # ------------------------------------------------------------------
+    # STEP 5/5: Boot Container & Background Daemon
+    # ------------------------------------------------------------------
     print_setup_header
+    local s5_prompt="\033[1m[Step 5/5] Finalize & Boot Environment\033[0m\n\033[90mStart the workspace container and host daemon to complete the onboarding.\033[0m\n"
+    local s5_opts=("Yes, start AIWS and run system checks (Recommended)" "Start AIWS silently in the background" "Skip this step (run 'aiws start' manually later)")
+    local s5_choice=0
+    render_menu "$s5_prompt" "${s5_opts[@]}" || s5_choice=$?
 
-    # ------------------------------------------------------------------
-    # STEP 5/5: Launch Workstation Runtime & Health Check
-    # ------------------------------------------------------------------
-    echo -e "\033[1m[Step 5/5] Launch Runtime & System Doctor\033[0m"
-    echo -e "\033[90mStart the Docker sandbox container, DSH Agent Harness (:4091), and verify host health.\033[0m"
-    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Start runtime & run 'aiws doctor' health check now\033[0m"
-    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Run 'aiws doctor' health check only\033[0m"
-    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
-    echo -e "\033[90m${_C_BOLD}[q]${_C_RESET} Quit to Dashboard\033[0m"
-    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s/q] (default: 1): "; read -r step5_choice || true
+    if [[ "$s5_choice" -eq 255 ]]; then return 0; fi
 
-    case "${step5_choice:-1}" in
-        1)
-            cmd_daemon start >/dev/null 2>&1 || true
-            if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
-                cmd_start || true
-            else
-                step_results+=("\033[90m[\033[33m!\033[90m]\033[0m \033[33mNo active project, skipped start\033[0m")
-                cmd_doctor || true
-            fi
-            ;;
-        2)
+    case "$s5_choice" in
+        0)
+            tput cnorm
+            step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSystem Booted & Diagnosed\033[0m")
+            print_setup_header
+            cmd_start
             cmd_doctor || true
             ;;
-        q|Q) return 0 ;;
-
-        *)
+        1)
+            tput cnorm
+            step_results+=("\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSystem Booted in Background\033[0m")
+            print_setup_header
+            cmd_start
+            ;;
+        2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
             ;;
     esac
 
-    touch "$RUNTIME_DIR/.setup_done"
-    print_setup_header
-    echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}       ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                    ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
-    echo
-}
-
-usage() {
-    print_aiws_banner
-    print_usage_text
-}
-
-print_usage_text() {
-    echo
-    echo -e "[1m  [ ONBOARDING & SETUP ][0m"
-    echo -e "  [36m❯[0m aiws [36msetup[0m                    [90mLaunch interactive setup wizard[0m"
-    echo -e "  [36m❯[0m aiws [36mdoctor[0m                   [90mRun full host & container diagnostics[0m"
-    echo
-    echo -e "[1m  [ PROJECTS ][0m"
-    echo -e "  [36m❯[0m aiws [36madd[0m <url>                [90mClone a GitHub repo to ~/projects[0m"
-    echo -e "  [36m❯[0m aiws [36muse[0m <project>            [90mSet active project & mount to /workspace[0m"
-    echo -e "  [36m❯[0m aiws [36mlist[0m                     [90mList all cloned projects[0m"
-    echo -e "  [36m❯[0m aiws [36mremove[0m <project>         [90mRemove a project from ~/projects[0m"
-    echo
-    echo -e "[1m  [ GIT (ZERO-PAT) ][0m"
-    echo -e "  [36m❯[0m aiws [36mdiff[0m                     [90mShow working tree status & diff[0m"
-    echo -e "  [36m❯[0m aiws [36mpull[0m                     [90mPull latest changes[0m"
-    echo -e "  [36m❯[0m aiws [36mpush[0m \"<message>\"         [90mStage, commit, and push[0m"
-    echo
-    echo -e "[1m  [ RUNTIME & APP ][0m"
-    echo -e "  [36m❯[0m aiws [36mstart[0m | [36mstop[0m | [36mrestart[0m   [90mManage container runtime[0m"
-    echo -e "  [36m❯[0m aiws [36mstatus[0m | [36mlogs[0m | [36mshell[0m    [90mInspect state, logs, or open bash[0m"
-    echo -e "  [36m❯[0m aiws [36mrun[0m                      [90mAuto-detect & start dev server[0m"
-    echo -e "  [36m❯[0m aiws [36mapp[0m {stop|restart...}    [90mManage the internal app server[0m"
-    echo -e "  [36m❯[0m aiws [36mpreview[0m                  [90mShow local & Cloudflare URLs for ports[0m"
-    echo
-    echo -e "[1m  [ DSH AGENT HARNESS ][0m"
-    echo -e "  [36m❯[0m aiws [36mharness[0m {start...}       [90mManage the Agent Harness API[0m"
-    echo -e "  [36m❯[0m aiws [36mdsh update[0m [version]     [90mUpdate @deepseek-ai/dsh[0m"
-    echo -e "  [36m❯[0m aiws [36mdsh version[0m              [90mPrint active DSH version[0m"
-    echo
-    echo -e "[1m  [ SYSTEM & INTEGRATIONS ][0m"
-    echo -e "  [36m❯[0m aiws [36mgithub[0m | [36mtunnel[0m          [90mSetup integrations[0m"
-    echo -e "  [36m❯[0m aiws [36mdaemon[0m {start|stop...}   [90mManage host API daemon[0m"
-    echo -e "  [36m❯[0m aiws [36mstate[0m {export|import}    [90mBackup/Restore workspace[0m"
-    echo -e "  [36m❯[0m aiws [36mcache[0m clear              [90mClear persistent caches[0m"
-    echo -e "  [36m❯[0m aiws [36mupdate[0m | [36mupgrade[0m         [90mUpdate CLI and fetch latest image[0m"
-    echo
-}
-
-# --------------------------------------------------
-# Interactive TUI Menu System
-# --------------------------------------------------
-render_menu() {
-    local prompt="$1"
-    shift
-    local options=("$@")
-    local selected=0
-    local key
-
-    tput civis
-    tput sc
-
-    trap 'tput cnorm; echo; exit 1' INT
-
-    while true; do
-        tput rc
-        echo -e "\n\033[1m$prompt\033[0m\n"
-        for i in "${!options[@]}"; do
-            if [[ "$i" -eq "$selected" ]]; then
-                echo -e "  \033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
-            else
-                echo -e "    ${options[$i]}\033[K"
-            fi
-        done
-
-        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m h \033[90m] Help    [\033[36m q \033[90m] Quit\033[0m\033[K"
-
-        read -rsn1 key || true
-        if [[ "$key" == $'\x1b' ]]; then
-            read -rsn2 -t 0.1 key || true
-            if [[ "$key" == "[A" || "$key" == "A" || "$key" == "OA" ]]; then
-                selected=$((selected - 1))
-                [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
-            elif [[ "$key" == "[B" || "$key" == "B" || "$key" == "OB" ]]; then
-                selected=$((selected + 1))
-                [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
-            fi
-        elif [[ "$key" == "k" || "$key" == "w" || "$key" == "W" || "$key" == "K" ]]; then
-            selected=$((selected - 1))
-            [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1)) || true
-        elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
-            selected=$((selected + 1))
-            [[ "$selected" -ge ${#options[@]} ]] && selected=0 || true
-        elif [[ "$key" == "h" || "$key" == "H" ]]; then
-            tput cnorm
-            tput rc
-            tput ed
-            clear
-            print_header "HELP & CLI USAGE"
-            print_usage_text
-            echo -e -n "\n\033[90m[\033[36m Enter \033[90m] Return to menu...\033[0m"
-            read -r || true
-            clear
-            print_aiws_banner
-            tput civis
-            tput sc
-        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
-            tput cnorm
-            tput rc
-            tput ed
-            exit 0
-        elif [[ "$key" == "" ]]; then
-            break
-        fi
-    done
-
     tput cnorm
-    tput rc
-    tput ed
-    return "$selected"
+    print_setup_header
+
+    echo -e "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
+    echo -e "${_C_CYAN}│${_C_RESET} ${_C_BOLD}AIWS CLI Onboarding Flow Complete${_C_RESET}                                ${_C_CYAN}│${_C_RESET}"
+    echo -e "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
+    echo -e "\033[90mYour workstation is configured and ready. Returning to main menu...\033[0m"
+    sleep 2
 }
 
 
@@ -2129,6 +2023,8 @@ cmd_edit_configs() {
         local choice=0
         render_menu "Rotate & Edit Configurations" "${edit_opts[@]}" || choice=$?
         
+        if [[ "$choice" -eq 255 ]]; then break; fi
+
         case "$choice" in
             0)
                 clear
@@ -2296,6 +2192,8 @@ cmd_tui() {
         clear
         print_aiws_banner
         echo
+
+        if [[ "$choice" -eq 255 ]]; then break; fi
 
         case "$choice" in
             0) cmd_start ;;
