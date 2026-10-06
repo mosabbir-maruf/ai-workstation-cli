@@ -431,9 +431,18 @@ cmd_status() {
         bridge_status="running"
     fi
 
-    echo "=== Harness ==="
-    echo "DSH:    $dsh_status"
-    echo "Bridge: $bridge_status"
+    echo
+    echo -e "  \033[1mHARNESS\033[0m"
+    if [[ "$dsh_status" == "running" ]]; then
+        echo -e "    \033[90mDSH      :\033[0m \033[36mrunning\033[0m"
+    else
+        echo -e "    \033[90mDSH      :\033[0m stopped"
+    fi
+    if [[ "$bridge_status" == "running" ]]; then
+        echo -e "    \033[90mBridge   :\033[0m \033[36mrunning\033[0m"
+    else
+        echo -e "    \033[90mBridge   :\033[0m stopped"
+    fi
 
     if [[ "$dsh_status" == "running" && "$bridge_status" == "running" ]]; then
         return 0
