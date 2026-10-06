@@ -2304,6 +2304,10 @@ cmd_tui() {
         is_setup_mode=1
     fi
 
+    run_tui_cmd() {
+        ( "$@" ) || true
+    }
+
     while true; do
         if [[ "$is_setup_mode" -eq 1 ]]; then
             local setup_opts=("Yes, start Setup Wizard" "Skip for now")
@@ -2368,13 +2372,13 @@ cmd_tui() {
                     if [[ "$w_choice" -eq 255 || "$w_choice" -eq 7 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$w_choice" in
-                        0) cmd_start; load_env 2>/dev/null || true; redraw_banner ;;
-                        1) cmd_stop; load_env 2>/dev/null || true; redraw_banner ;;
-                        2) cmd_status ;;
-                        3) cmd_logs ;;
-                        4) cmd_run ;;
-                        5) cmd_preview ;;
-                        6) cmd_shell ;;
+                        0) run_tui_cmd cmd_start; load_env 2>/dev/null || true; redraw_banner ;;
+                        1) run_tui_cmd cmd_stop; load_env 2>/dev/null || true; redraw_banner ;;
+                        2) run_tui_cmd cmd_status ;;
+                        3) run_tui_cmd cmd_logs ;;
+                        4) run_tui_cmd cmd_run ;;
+                        5) run_tui_cmd cmd_preview ;;
+                        6) run_tui_cmd cmd_shell ;;
                     esac
                     prompt_return
                 done
@@ -2398,7 +2402,7 @@ cmd_tui() {
                     if [[ "$p_choice" -eq 255 || "$p_choice" -eq 7 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$p_choice" in
-                        0) cmd_list ;;
+                        0) run_tui_cmd cmd_list ;;
                         1)
                             local existing_projects=()
                             for p in "$PROJECTS_DIR"/*; do
@@ -2412,7 +2416,7 @@ cmd_tui() {
                                 local sel_proj=0
                                 render_menu "Select project to set active" "${existing_projects[@]}" || sel_proj=$?
                                 if [[ "$sel_proj" -ne 255 ]]; then
-                                    cmd_use "${existing_projects[$sel_proj]}"
+                                    run_tui_cmd cmd_use "${existing_projects[$sel_proj]}"
                                     load_env 2>/dev/null || true
                                     redraw_banner
                                 fi
@@ -2422,7 +2426,7 @@ cmd_tui() {
                             local repo_url
                             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Paste GitHub HTTPS repository URL: "; read -r repo_url || true
                             if [[ -n "$repo_url" ]]; then
-                                cmd_add "$repo_url"
+                                run_tui_cmd cmd_add "$repo_url"
                                 load_env 2>/dev/null || true
                                 redraw_banner
                             else
@@ -2445,7 +2449,7 @@ cmd_tui() {
                                     local target_rm="${existing_projects[$sel_rm]}"
                                     echo -e -n "\n\033[90m[\033[31m!\033[90m]\033[0m Are you sure you want to delete '$target_rm'? [y/N]: "; read -r confirm_rm || true
                                     if [[ "$confirm_rm" =~ ^[yY] ]]; then
-                                        cmd_remove "$target_rm"
+                                        run_tui_cmd cmd_remove "$target_rm"
                                         load_env 2>/dev/null || true
                                         redraw_banner
                                     else
@@ -2454,9 +2458,9 @@ cmd_tui() {
                                 fi
                             fi
                             ;;
-                        4) cmd_git status ;;
-                        5) cmd_diff ;;
-                        6) cmd_pull ;;
+                        4) run_tui_cmd cmd_git status ;;
+                        5) run_tui_cmd cmd_diff ;;
+                        6) run_tui_cmd cmd_pull ;;
                     esac
                     prompt_return
                 done
@@ -2480,17 +2484,17 @@ cmd_tui() {
                     if [[ "$h_choice" -eq 255 || "$h_choice" -eq 7 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$h_choice" in
-                        0) cmd_harness_status ;;
-                        1) cmd_harness_start; redraw_banner ;;
-                        2) cmd_harness_stop; redraw_banner ;;
-                        3) cmd_harness_restart; redraw_banner ;;
-                        4) cmd_harness_sync ;;
+                        0) run_tui_cmd cmd_harness_status ;;
+                        1) run_tui_cmd cmd_harness_start; redraw_banner ;;
+                        2) run_tui_cmd cmd_harness_stop; redraw_banner ;;
+                        3) run_tui_cmd cmd_harness_restart; redraw_banner ;;
+                        4) run_tui_cmd cmd_harness_sync ;;
                         5)
                             local target_v
                             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Target DSH version [latest/x.y.z] (default: latest): "; read -r target_v || true
-                            cmd_dsh_update "${target_v:-latest}"
+                            run_tui_cmd cmd_dsh_update "${target_v:-latest}"
                             ;;
-                        6) cmd_dsh_version ;;
+                        6) run_tui_cmd cmd_dsh_version ;;
                     esac
                     prompt_return
                 done
@@ -2518,16 +2522,16 @@ cmd_tui() {
                         continue
                     fi
                     case "$t_choice" in
-                        0) bash "$TUNNEL_LIB" status ;;
-                        1) bash "$TUNNEL_LIB" start && load_env 2>/dev/null || true; redraw_banner ;;
-                        2) bash "$TUNNEL_LIB" stop && load_env 2>/dev/null || true; redraw_banner ;;
+                        0) run_tui_cmd bash "$TUNNEL_LIB" status ;;
+                        1) run_tui_cmd bash "$TUNNEL_LIB" start && load_env 2>/dev/null || true; redraw_banner ;;
+                        2) run_tui_cmd bash "$TUNNEL_LIB" stop && load_env 2>/dev/null || true; redraw_banner ;;
                         3)
                             local sync_p
                             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter port to forward (default: 3000): "; read -r sync_p || true
-                            bash "$TUNNEL_LIB" sync "${sync_p:-3000}"
+                            run_tui_cmd bash "$TUNNEL_LIB" sync "${sync_p:-3000}"
                             ;;
-                        4) bash "$TUNNEL_LIB" setup && load_env 2>/dev/null || true; redraw_banner ;;
-                        5) bash "$TUNNEL_LIB" logs ;;
+                        4) run_tui_cmd bash "$TUNNEL_LIB" setup && load_env 2>/dev/null || true; redraw_banner ;;
+                        5) run_tui_cmd bash "$TUNNEL_LIB" logs ;;
                     esac
                     prompt_return
                 done
@@ -2547,9 +2551,9 @@ cmd_tui() {
                     if [[ "$gh_choice" -eq 255 || "$gh_choice" -eq 3 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$gh_choice" in
-                        0) cmd_github status ;;
-                        1) cmd_github test ;;
-                        2) cmd_github setup && load_env 2>/dev/null || true; redraw_banner ;;
+                        0) run_tui_cmd cmd_github status ;;
+                        1) run_tui_cmd cmd_github test ;;
+                        2) run_tui_cmd cmd_github setup && load_env 2>/dev/null || true; redraw_banner ;;
                     esac
                     prompt_return
                 done
@@ -2571,11 +2575,11 @@ cmd_tui() {
                     if [[ "$d_choice" -eq 255 || "$d_choice" -eq 5 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$d_choice" in
-                        0) cmd_daemon status ;;
-                        1) cmd_daemon start; redraw_banner ;;
-                        2) cmd_daemon restart; redraw_banner ;;
-                        3) cmd_daemon stop; redraw_banner ;;
-                        4) cmd_daemon logs ;;
+                        0) run_tui_cmd cmd_daemon status ;;
+                        1) run_tui_cmd cmd_daemon start; redraw_banner ;;
+                        2) run_tui_cmd cmd_daemon restart; redraw_banner ;;
+                        3) run_tui_cmd cmd_daemon stop; redraw_banner ;;
+                        4) run_tui_cmd cmd_daemon logs ;;
                     esac
                     prompt_return
                 done
@@ -2599,17 +2603,17 @@ cmd_tui() {
                     if [[ "$sys_choice" -eq 255 || "$sys_choice" -eq 7 ]]; then break; fi
                     clear; print_aiws_banner; echo
                     case "$sys_choice" in
-                        0) cmd_doctor ;;
-                        1) cmd_cache ;;
-                        2) cmd_cache_clear ;;
-                        3) cmd_cache_clear --deps ;;
-                        4) cmd_cache_clear --deps --yes ;;
-                        5) cmd_state_export ;;
+                        0) run_tui_cmd cmd_doctor ;;
+                        1) run_tui_cmd cmd_cache ;;
+                        2) run_tui_cmd cmd_cache_clear ;;
+                        3) run_tui_cmd cmd_cache_clear --deps ;;
+                        4) run_tui_cmd cmd_cache_clear --deps --yes ;;
+                        5) run_tui_cmd cmd_state_export ;;
                         6)
                             local arch_file
                             echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Path to backup archive (.tar.gz): "; read -r arch_file || true
                             if [[ -f "$arch_file" ]]; then
-                                cmd_state_import "$arch_file"
+                                run_tui_cmd cmd_state_import "$arch_file"
                             else
                                 echo -e "\n\033[33mFile not found: ${arch_file:-none}\033[0m"
                             fi
@@ -2619,10 +2623,10 @@ cmd_tui() {
                 done
                 continue
                 ;;
-            7) cmd_setup ;;
+            7) run_tui_cmd cmd_setup ;;
             8) cmd_edit_configs ;;
-            9) cmd_update; prompt_return ;;
-            10) cmd_uninstall; prompt_return ;;
+            9) run_tui_cmd cmd_update; prompt_return ;;
+            10) run_tui_cmd cmd_uninstall; prompt_return ;;
             11) 
                print_header "HELP & CLI USAGE"
                print_usage_text 
