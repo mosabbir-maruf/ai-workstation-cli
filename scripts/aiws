@@ -1651,6 +1651,19 @@ cmd_daemon() {
 
     case "$action" in
         start)
+            if ! is_daemon_running; then
+                # Ensure port 8000 is strictly free before attempting to start
+                if command -v lsof >/dev/null 2>&1; then
+                    local port_pids
+                    port_pids=$(sudo lsof -t -i:8000 2>/dev/null || true)
+                    if [[ -n "$port_pids" ]]; then
+                        sudo kill -9 $port_pids 2>/dev/null || true
+                    fi
+                elif command -v fuser >/dev/null 2>&1; then
+                    sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
+                fi
+            fi
+            
             if has_daemon_systemd; then
                 sudo systemctl start "$service_name"
                 if systemctl is-active --quiet "$service_name" 2>/dev/null; then
