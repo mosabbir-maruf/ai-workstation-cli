@@ -250,16 +250,16 @@ github_setup() {
         
         echo
 
-        echo -e -n "  \033[90mGitHub App ID:\033[0m "; read -r app_id
+        echo -e -n "\033[90mGitHub App ID:\033[0m "; read -r app_id
         [[ "$app_id" =~ ^[0-9]+$ ]] ||
             die "Invalid App ID."
 
-        echo -e -n "  \033[90mGitHub Inst ID:\033[0m "; read -r installation_id
+        echo -e -n "\033[90mGitHub Inst ID:\033[0m "; read -r installation_id
         [[ "$installation_id" =~ ^[0-9]+$ ]] ||
             die "Invalid Installation ID."
 
         echo
-        echo -e -n "  \033[90mPrivate Key (.pem) Path :\033[0m "; read -r pem_input
+        echo -e -n "\033[90mPrivate Key (.pem) Path :\033[0m "; read -r pem_input
     fi
 
     [[ "$app_id" =~ ^[0-9]+$ ]] ||

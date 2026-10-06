@@ -104,10 +104,10 @@ tunnel_setup() {
     print_header "CLOUDFLARE TUNNEL SETUP"
     
     echo
-    echo -e "  \033[90m[\033[36mi\033[90m]\033[0m First, in Cloudflare Zero Trust -> Networks -> Tunnels:"
-    echo -e "      \033[90m1.\033[0m Create tunnel (type Cloudflared), name it, copy its token."
-    echo -e "      \033[90m2.\033[0m Add public hostnames AFTER setup (see below)."
-    echo -e "      \033[90m3.\033[0m Add an Access policy for both hostnames."
+    echo -e "\033[90m[\033[36mi\033[90m]\033[0m First, in Cloudflare Zero Trust -> Networks -> Tunnels:"
+    echo -e "\033[90m1.\033[0m Create tunnel (type Cloudflared), name it, copy its token."
+    echo -e "\033[90m2.\033[0m Add public hostnames AFTER setup (see below)."
+    echo -e "\033[90m3.\033[0m Add an Access policy for both hostnames."
     echo
 
     ensure_cloudflared
@@ -117,7 +117,7 @@ tunnel_setup() {
 
     local token app_host dsh_host app_port detected
 
-    echo -e -n "  \033[90mConnector Token (hidden)  :\033[0m "; read -r -s token
+    echo -e -n "\033[90mConnector Token (hidden)  :\033[0m "; read -r -s token
     echo
     [[ -n "$token" ]] ||
         die "Empty token. Copy it from the tunnel's connector install command."
@@ -127,11 +127,11 @@ tunnel_setup() {
     token=""
 
     echo
-    echo -e -n "  \033[90mApp Hostname (app.ext.com):\033[0m "; read -r app_host
+    echo -e -n "\033[90mApp Hostname (app.ext.com):\033[0m "; read -r app_host
     valid_hostname "$app_host" ||
         die "Invalid hostname: $app_host"
 
-    echo -e -n "  \033[90mDSH Hostname (dsh.ext.com):\033[0m "; read -r dsh_host
+    echo -e -n "\033[90mDSH Hostname (dsh.ext.com):\033[0m "; read -r dsh_host
     valid_hostname "$dsh_host" ||
         die "Invalid hostname: $dsh_host"
 
@@ -140,10 +140,10 @@ tunnel_setup() {
 
     detected="$(detect_app_port || true)"
     [[ -n "$detected" ]] &&
-        echo -e "  \033[90m[\033[36mi\033[90m]\033[0m Detected app port: $detected"
+        echo -e "\033[90m[\033[36mi\033[90m]\033[0m Detected app port: $detected"
 
     echo
-    echo -e -n "  \033[90mLocal App Port [${detected:-3000}]  :\033[0m "; read -r app_port
+    echo -e -n "\033[90mLocal App Port [${detected:-3000}]  :\033[0m "; read -r app_port
     app_port="${app_port:-${detected:-3000}}"
     valid_port "$app_port" ||
         die "Invalid port: $app_port"

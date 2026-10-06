@@ -402,14 +402,14 @@ cmd_start() {
 
     start_bridge
 
-    echo "Harness started."
+    echo -e "\033[90m[\033[32m✓\033[90m]\033[0m Harness started."
 }
 
 cmd_stop() {
     stop_process "$BRIDGE_PID_FILE"
     stop_process "$DSH_PID_FILE"
 
-    echo "Harness stopped."
+    echo -e "\033[90m[\033[32m✓\033[90m]\033[0m Harness stopped."
 }
 
 cmd_restart() {
@@ -432,16 +432,16 @@ cmd_status() {
     fi
 
     echo
-    echo -e "  \033[1mHARNESS\033[0m"
+    echo -e "\033[1mHARNESS\033[0m"
     if [[ "$dsh_status" == "running" ]]; then
-        echo -e "    \033[90mDSH      :\033[0m \033[36mrunning\033[0m"
+        echo -e "\033[90mDSH      :\033[0m \033[36mrunning\033[0m"
     else
-        echo -e "    \033[90mDSH      :\033[0m stopped"
+        echo -e "\033[90mDSH      :\033[0m stopped"
     fi
     if [[ "$bridge_status" == "running" ]]; then
-        echo -e "    \033[90mBridge   :\033[0m \033[36mrunning\033[0m"
+        echo -e "\033[90mBridge   :\033[0m \033[36mrunning\033[0m"
     else
-        echo -e "    \033[90mBridge   :\033[0m stopped"
+        echo -e "\033[90mBridge   :\033[0m stopped"
     fi
 
     if [[ "$dsh_status" == "running" && "$bridge_status" == "running" ]]; then
