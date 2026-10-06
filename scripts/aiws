@@ -2554,9 +2554,9 @@ case "${1:-}" in
         if [[ -t 0 && -t 1 ]]; then
             cmd_tui
         else
-            usage
+            print_usage_text
         fi
         ;;
-    help|--help|-h) usage ;;
+    help|--help|-h) print_usage_text ;;
     *) die "Unknown command: $1" ;;
 esac
