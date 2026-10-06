@@ -1778,10 +1778,8 @@ EOF2
 }
 
 cmd_setup() {
-    print_aiws_banner
-    echo
-    echo "${_C_BOLD}Welcome to the AIWS CLI Interactive Onboarding Flow${_C_RESET}"
-    echo "${_C_DIM}Walk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].${_C_RESET}"
+    print_header "SETUP & CONFIGURATION"
+    echo -e "\033[90mWalk through 5 quick steps to configure your workstation. Every step is optional and can be skipped with [s].\033[0m"
     echo
 
     # ------------------------------------------------------------------
@@ -1789,17 +1787,17 @@ cmd_setup() {
     # ------------------------------------------------------------------
     local current_key="${WORKSTATION_API_KEY:-}"
 
-    echo "${_C_CYAN}╭─ [Step 1/5] Host Control Daemon & API Key${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  Secures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard."
+    echo -e "\033[1m[Step 1/5] Host Control Daemon & API Key\033[0m"
+    echo -e "\033[90mSecures the Host Control Daemon (${_C_BOLD}http://127.0.0.1:8000${_C_RESET}) for your Web Dashboard.\033[0m"
     if [[ -n "$current_key" ]]; then
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured${_C_RESET} (${current_key:0:6}••••••••)"
+        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured${_C_RESET} (${current_key:0:6}••••••••)\033[0m"
     else
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}"
+        echo -e "\033[90mCurrent status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}\033[0m"
     fi
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Auto-generate a secure 32-byte API key (Recommended)"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Enter a custom API key"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step"
-    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: s): " step1_choice || true
+    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Auto-generate a secure 32-byte API key (Recommended)\033[0m"
+    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Enter a custom API key\033[0m"
+    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: s): "; read -r step1_choice || true
 
     case "${step1_choice:-s}" in
         1)
@@ -1807,22 +1805,22 @@ cmd_setup() {
             gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
             set_env_var "WORKSTATION_API_KEY" "$gen_key"
             cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
-            echo "   ${_C_GREEN}✓ Generated WORKSTATION_API_KEY:${_C_RESET} ${_C_BOLD}${gen_key}${_C_RESET}"
-            echo "   ${_C_DIM}(Save this key to enter in your Web Dashboard connection dialog)${_C_RESET}"
+            echo -e "\033[90m[\033[32m✓\033[90m]\033[0m \033[32mGenerated WORKSTATION_API_KEY:${_C_RESET} ${_C_BOLD}${gen_key}${_C_RESET}"
+            echo -e "\033[90m(Save this key to enter in your Web Dashboard connection dialog)${_C_RESET}"
             ;;
         2)
             local custom_key
-            read -r -p "   Enter custom WORKSTATION_API_KEY: " custom_key || true
+            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter custom WORKSTATION_API_KEY: "; read -r custom_key || true
             if [[ -n "$custom_key" ]]; then
                 set_env_var "WORKSTATION_API_KEY" "$custom_key"
                 cmd_daemon restart >/dev/null 2>&1 || cmd_daemon start >/dev/null 2>&1 || true
-                echo "   ${_C_GREEN}✓ Saved custom WORKSTATION_API_KEY and restarted daemon.${_C_RESET}"
+                echo -e "\033[90m[\033[32m✓\033[90m]\033[0m \033[32mSaved custom WORKSTATION_API_KEY and restarted daemon.${_C_RESET}"
             else
-                echo "   ${_C_YELLOW}↷ Empty input — skipped.${_C_RESET}"
+                echo -e "\033[90m[\033[33m↷\033[90m]\033[0m \033[90mEmpty input — skipped.${_C_RESET}"
             fi
             ;;
         *)
-            echo "   ${_C_DIM}↷ Skipped Step 1.${_C_RESET}"
+            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 1.${_C_RESET}"
             ;;
     esac
     echo
@@ -1830,23 +1828,23 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 2/5: GitHub App Credential Broker
     # ------------------------------------------------------------------
-    echo "${_C_CYAN}╭─ [Step 2/5] GitHub App Integration (Zero-PAT Broker)${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  Enables private repository cloning, pulling & pushing without storing personal tokens."
+    echo -e "\033[1m[Step 2/5] GitHub App Integration (Zero-PAT Broker)\033[0m"
+    echo -e "\033[90mEnables private repository cloning, pulling & pushing without storing personal tokens.\033[0m"
     if [[ -n "${GITHUB_APP_ID:-}" && -f "$ROOT/secrets/github-app.pem" ]]; then
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured (App ID: ${GITHUB_APP_ID}, Installation: ${GITHUB_INSTALLATION_ID:-unset})${_C_RESET}"
+        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured (App ID: ${GITHUB_APP_ID}, Installation: ${GITHUB_INSTALLATION_ID:-unset})${_C_RESET}\033[0m"
     else
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Not configured${_C_RESET}"
+        echo -e "\033[90mCurrent status: ${_C_YELLOW}Not configured${_C_RESET}\033[0m"
     fi
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws github setup' anytime later)"
-    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step2_choice || true
+    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)\033[0m"
+    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws github setup' anytime later)\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s] (default: s): "; read -r step2_choice || true
 
     case "${step2_choice:-s}" in
         1)
-            cmd_github setup && load_env || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
+            cmd_github setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mGitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
             ;;
         *)
-            echo "   ${_C_DIM}↷ Skipped Step 2.${_C_RESET}"
+            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 2.${_C_RESET}"
             ;;
     esac
     echo
@@ -1854,25 +1852,25 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 3/5: Cloudflare Zero-Trust Tunnel (Anywhere Access)
     # ------------------------------------------------------------------
-    echo "${_C_CYAN}╭─ [Step 3/5] Cloudflare Tunnel (Anywhere Access)${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  Publishes your App Preview, DSH Agent Web UI & Host API securely over custom domains."
+    echo -e "\033[1m[Step 3/5] Cloudflare Tunnel (Anywhere Access)\033[0m"
+    echo -e "\033[90mPublishes your App Preview, DSH Agent Web UI & Host API securely over custom domains.\033[0m"
     if [[ "${CLOUDFLARED_TOKEN_SET:-}" == "1" ]]; then
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_GREEN}Configured (App: ${CLOUDFLARED_APP_HOSTNAME:-none}, DSH: ${CLOUDFLARED_DSH_HOSTNAME:-none})${_C_RESET}"
+        echo -e "\033[90mCurrent status: ${_C_GREEN}Configured (App: ${CLOUDFLARED_APP_HOSTNAME:-none}, DSH: ${CLOUDFLARED_DSH_HOSTNAME:-none})${_C_RESET}\033[0m"
     else
-        echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Local-only mode (no tunnel configured)${_C_RESET}"
+        echo -e "\033[90mCurrent status: ${_C_YELLOW}Local-only mode (no tunnel configured)${_C_RESET}\033[0m"
     fi
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws tunnel setup' anytime later)"
-    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step3_choice || true
+    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames\033[0m"
+    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws tunnel setup' anytime later)\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/s] (default: s): "; read -r step3_choice || true
 
     case "${step3_choice:-s}" in
         1)
             if [[ -f "$TUNNEL_LIB" ]]; then
-                bash "$TUNNEL_LIB" setup && load_env || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: aiws tunnel setup${_C_RESET}"
+                bash "$TUNNEL_LIB" setup && load_env || echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mTunnel setup incomplete — retry anytime with: aiws tunnel setup${_C_RESET}"
             fi
             ;;
         *)
-            echo "   ${_C_DIM}↷ Skipped Step 3.${_C_RESET}"
+            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 3.${_C_RESET}"
             ;;
     esac
     echo
@@ -1880,22 +1878,22 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 4/5: First Project Workspace (aiws add / aiws use)
     # ------------------------------------------------------------------
-    echo "${_C_CYAN}╭─ [Step 4/5] Workspace Project Onboarding${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  Clone a GitHub repository into ~/projects and mount it as your active /workspace."
+    echo -e "\033[1m[Step 4/5] Workspace Project Onboarding\033[0m"
+    echo -e "\033[90mClone a GitHub repository into ~/projects and mount it as your active /workspace.\033[0m"
     if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
-        echo "${_C_CYAN}│${_C_RESET}  Current active project: ${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET} (${ACTIVE_PROJECT_PATH:-})"
+        echo -e "\033[90mCurrent active project: ${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET} (${ACTIVE_PROJECT_PATH:-})\033[0m"
     else
-        echo "${_C_CYAN}│${_C_RESET}  Current active project: ${_C_YELLOW}None selected${_C_RESET}"
+        echo -e "\033[90mCurrent active project: ${_C_YELLOW}None selected${_C_RESET}\033[0m"
     fi
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)"
-    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: s): " step4_choice || true
+    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it\033[0m"
+    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects\033[0m"
+    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: s): "; read -r step4_choice || true
 
     case "${step4_choice:-s}" in
         1)
             local repo_url repo_name
-            read -r -p "   GitHub HTTPS URL (e.g. https://github.com/org/repo): " repo_url || true
+            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m GitHub HTTPS URL (e.g. https://github.com/org/repo): " repo_url || true
             if [[ -n "$repo_url" ]]; then
                 repo_name="${repo_url%/}"
                 repo_name="${repo_name##*/}"
@@ -1904,20 +1902,20 @@ cmd_setup() {
                     cmd_use "$repo_name" || true
                 fi
             else
-                echo "   ${_C_YELLOW}↷ No URL provided — skipped.${_C_RESET}"
+                echo -e "\033[90m[\033[33m↷\033[90m]\033[0m \033[90mNo URL provided — skipped.${_C_RESET}"
             fi
             ;;
         2)
             echo "   Available projects in $PROJECTS_DIR:"
             cmd_list || true
             local chosen_proj
-            read -r -p "   Enter project name to activate: " chosen_proj || true
+            echo -e -n "\033[90m[\033[36m?\033[90m]\033[0m Enter project name to activate: " chosen_proj || true
             if [[ -n "$chosen_proj" ]]; then
                 cmd_use "$chosen_proj" || true
             fi
             ;;
         *)
-            echo "   ${_C_DIM}↷ Skipped Step 4.${_C_RESET}"
+            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 4.${_C_RESET}"
             ;;
     esac
     echo
@@ -1925,12 +1923,12 @@ cmd_setup() {
     # ------------------------------------------------------------------
     # STEP 5/5: Launch Workstation Runtime & Health Check
     # ------------------------------------------------------------------
-    echo "${_C_CYAN}╭─ [Step 5/5] Launch Runtime & System Doctor${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  Start the Docker sandbox container, DSH Agent Harness (:4091), and verify host health."
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Start runtime & run 'aiws doctor' health check now"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Run 'aiws doctor' health check only"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step"
-    read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: 1): " step5_choice || true
+    echo -e "\033[1m[Step 5/5] Launch Runtime & System Doctor\033[0m"
+    echo -e "\033[90mStart the Docker sandbox container, DSH Agent Harness (:4091), and verify host health.\033[0m"
+    echo -e "\033[90m${_C_BOLD}[1]${_C_RESET} Start runtime & run 'aiws doctor' health check now\033[0m"
+    echo -e "\033[90m${_C_BOLD}[2]${_C_RESET} Run 'aiws doctor' health check only\033[0m"
+    echo -e "\033[90m${_C_BOLD}[s]${_C_RESET} Skip this step\033[0m"
+    echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Select option [1/2/s] (default: 1): "; read -r step5_choice || true
 
     case "${step5_choice:-1}" in
         1)
@@ -1938,7 +1936,7 @@ cmd_setup() {
             if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
                 cmd_start || true
             else
-                echo "   ${_C_YELLOW}! No active project set yet — running 'aiws doctor' instead of 'aiws start'.${_C_RESET}"
+                echo -e "\033[90m[\033[33m!\033[90m]\033[0m \033[33mNo active project set yet — running 'aiws doctor' instead of 'aiws start'.${_C_RESET}"
                 cmd_doctor || true
             fi
             ;;
@@ -1946,19 +1944,19 @@ cmd_setup() {
             cmd_doctor || true
             ;;
         *)
-            echo "   ${_C_DIM}↷ Skipped Step 5.${_C_RESET}"
+            echo -e "\033[90m[\033[90m↷\033[90m]\033[0m \033[90mSkipped Step 5.${_C_RESET}"
             ;;
     esac
 
     touch "$RUNTIME_DIR/.setup_done"
     echo
     echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
+    echo -e "\033[90m${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}\033[0m"
     echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo -e "\033[90m• Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}\033[0m"
+    echo -e "\033[90m• Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}\033[0m"
+    echo -e "\033[90m• View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}\033[0m"
+    echo -e "\033[90m• Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}\033[0m"
     echo "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
     echo
 }
