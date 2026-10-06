@@ -2024,9 +2024,9 @@ render_menu() {
         echo -e "\n\033[1m$prompt\033[0m\n"
         for i in "${!options[@]}"; do
             if [[ "$i" -eq "$selected" ]]; then
-                echo -e "\033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
+                echo -e "  \033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
             else
-                echo -e "  ${options[$i]}\033[K"
+                echo -e "    ${options[$i]}\033[K"
             fi
         done
 
