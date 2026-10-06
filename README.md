@@ -1365,3 +1365,40 @@ Keep the following out of Git:
 - caches.
 
 Use GitHub for project source and the state export mechanism for DSH/workstation recovery.
+## Uninstallation
+
+To completely remove AIWS, the Docker containers, cache, logs, and background services from your VPS, follow these steps:
+
+1. **Stop all active containers and workloads:**
+   ```bash
+   aiws stop
+   ```
+2. **Stop and disable the background services:**
+   ```bash
+   sudo systemctl stop aiws-daemon github-broker
+   sudo systemctl disable aiws-daemon github-broker
+   sudo rm /etc/systemd/system/aiws-daemon.service
+   sudo rm /etc/systemd/system/github-broker.service
+   sudo systemctl daemon-reload
+   ```
+3. **Remove the global CLI command:**
+   ```bash
+   sudo rm /usr/local/bin/aiws
+   ```
+4. **Purge Docker images, cache, and dangling volumes:**
+   *Note: This will delete the AIWS images. It will not affect unrelated Docker projects unless you use `docker system prune -a`.*
+   ```bash
+   docker rmi aiws-cli aiws-harness || true
+   docker builder prune -f
+   ```
+5. **Delete the AIWS repository and runtime state:**
+   Assuming you cloned the AIWS repository to `~/ai-workstation-cli`, run:
+   ```bash
+   rm -rf ~/ai-workstation-cli
+   ```
+   *(Optional)* If you also want to delete all of your cloned GitHub repositories managed by AIWS:
+   ```bash
+   rm -rf ~/projects
+   ```
+
+Your VPS is now completely clean of AIWS logs, caches, and runtime artifacts!
