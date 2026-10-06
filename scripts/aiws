@@ -1803,7 +1803,7 @@ cmd_setup() {
     else
         s1_prompt+="\033[90mCurrent status: ${_C_YELLOW}No API Key configured (open local access)${_C_RESET}\033[0m"
     fi
-    local s1_opts=("Auto-generate a secure 32-byte API key (Recommended)" "Enter a custom API key" "Skip this step")
+    local s1_opts=("Auto-generate a secure 32-byte API key (Recommended)" "Enter a custom API key" "Skip this step" "Back to Main Menu")
     local s1_choice=2
     render_menu "$s1_prompt" "${s1_opts[@]}" || s1_choice=$?
     
@@ -1833,6 +1833,9 @@ cmd_setup() {
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 1: Skipped\033[0m")
             ;;
+        3)
+            return 0
+            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1845,7 +1848,7 @@ cmd_setup() {
     else
         s2_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured${_C_RESET}\033[0m"
     fi
-    local s2_opts=("Configure GitHub App (App ID, Installation ID, .pem key)" "Skip this step (run 'aiws github setup' anytime later)")
+    local s2_opts=("Configure GitHub App (App ID, Installation ID, .pem key)" "Skip this step (run 'aiws github setup' anytime later)" "Back to Main Menu")
     local s2_choice=1
     render_menu "$s2_prompt" "${s2_opts[@]}" || s2_choice=$?
 
@@ -1865,6 +1868,9 @@ cmd_setup() {
         1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 2: Skipped\033[0m")
             ;;
+        2)
+            return 0
+            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1877,7 +1883,7 @@ cmd_setup() {
     else
         s3_prompt+="\033[90mCurrent status: ${_C_YELLOW}Not configured (local access only)${_C_RESET}\033[0m"
     fi
-    local s3_opts=("Configure Cloudflare Tunnel token & hostnames" "Skip this step (run 'aiws tunnel setup' anytime later)")
+    local s3_opts=("Configure Cloudflare Tunnel token & hostnames" "Skip this step (run 'aiws tunnel setup' anytime later)" "Back to Main Menu")
     local s3_choice=1
     render_menu "$s3_prompt" "${s3_opts[@]}" || s3_choice=$?
 
@@ -1902,6 +1908,9 @@ cmd_setup() {
         1)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 3: Skipped\033[0m")
             ;;
+        2)
+            return 0
+            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1914,7 +1923,7 @@ cmd_setup() {
     else
         s4_prompt+="\033[90mCurrent active project: ${_C_YELLOW}None${_C_RESET}\033[0m"
     fi
-    local s4_opts=("Clone a GitHub repository URL and activate it" "Select an existing project from ~/projects" "Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)")
+    local s4_opts=("Clone a GitHub repository URL and activate it" "Select an existing project from ~/projects" "Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)" "Back to Main Menu")
     local s4_choice=2
     render_menu "$s4_prompt" "${s4_opts[@]}" || s4_choice=$?
 
@@ -1963,6 +1972,9 @@ cmd_setup() {
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 4: Skipped\033[0m")
             ;;
+        3)
+            return 0
+            ;;
     esac
 
     # ------------------------------------------------------------------
@@ -1970,7 +1982,7 @@ cmd_setup() {
     # ------------------------------------------------------------------
     print_setup_header
     local s5_prompt="\033[1m[Step 5/5] Finalize & Boot Environment\033[0m\n\033[90mStart the workspace container and host daemon to complete the onboarding.\033[0m\n"
-    local s5_opts=("Yes, start AIWS and run system checks (Recommended)" "Start AIWS silently in the background" "Skip this step (run 'aiws start' manually later)")
+    local s5_opts=("Yes, start AIWS and run system checks (Recommended)" "Start AIWS silently in the background" "Skip this step (run 'aiws start' manually later)" "Back to Main Menu")
     local s5_choice=0
     render_menu "$s5_prompt" "${s5_opts[@]}" || s5_choice=$?
 
@@ -1992,6 +2004,9 @@ cmd_setup() {
             ;;
         2)
             step_results+=("\033[90m[\033[90m↷\033[90m]\033[0m \033[90mStep 5: Skipped\033[0m")
+            ;;
+        3)
+            return 0
             ;;
     esac
 
@@ -2070,7 +2085,7 @@ render_menu() {
             fi
         done
 
-        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m h \033[90m] Help    [\033[36m q \033[90m] Quit\033[0m\033[K"
+        echo -e "\n\033[90m[\033[36m ↑/↓ or j/k \033[90m] Navigate    [\033[36m Enter \033[90m] Select    [\033[36m h \033[90m] Help    [\033[36m q \033[90m] Go Back / Quit\033[0m\033[K"
 
         read -rsn1 key || true
         if [[ "$key" == $'\x1b' ]]; then
