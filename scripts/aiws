@@ -2321,13 +2321,14 @@ cmd_tui() {
         fi
 
         local main_opts=(
-            "Start / Restart AIWS"
-            "Stop AIWS"
-            "Check Status"
-            "View Logs"
-            "Manage Daemon"
-            "Open Shell"
-            "Setup & Configuration"
+            "Workstation Operations (Start, Stop, Status, Logs, Run, Preview, Shell)"
+            "Projects Management (List, Switch, Add, Remove, Git Sync)"
+            "DSH & Agent Harness (Status, Start, Stop, Restart, Sync, Update DSH)"
+            "Cloudflare Tunnel (Status, Start, Stop, Sync, Setup, Logs)"
+            "GitHub App Integration (Status, Test Auth, Setup)"
+            "Host Control Daemon (Status, Start, Stop, Restart, Logs)"
+            "System Diagnostics, Cache & State (Doctor, Docker Disk, Cache Clear)"
+            "Guided Setup Wizard (aiws setup)"
             "Edit Integrations & Configs"
             "Update AIWS CLI"
             "Uninstall AIWS"
@@ -2349,53 +2350,285 @@ cmd_tui() {
         if [[ "$choice" -eq 255 ]]; then break; fi
 
         case "$choice" in
-            0) cmd_start; redraw_banner ;;
-            1) cmd_stop; redraw_banner ;;
-            2) cmd_status ;;
-            3) cmd_logs ;;
-            4)
+            0)
                 while true; do
-                    local daemon_opts=(
-                        "Start Daemon"
-                        "Restart Daemon"
-                        "Stop Daemon"
-                        "Daemon Status"
-                        "View Daemon Logs"
+                    local ws_opts=(
+                        "Start / Restart Workstation"
+                        "Stop Workstation"
+                        "Check Status (aiws status)"
+                        "View Logs (aiws logs)"
+                        "Run Dev Server (aiws run)"
+                        "Preview URLs & Ports (aiws preview)"
+                        "Open Container Shell (aiws shell)"
+                        "Back to Main Menu"
                     )
-                    clear
-                    print_aiws_banner
-                    echo
-                    local d_choice=0
-                    render_menu "Manage Host Control Daemon" "${daemon_opts[@]}" || d_choice=$?
-                    
-                    if [[ "$d_choice" -eq 255 ]]; then break; fi
-                    
-                    clear
-                    print_aiws_banner
-                    echo
-                    
-                    case "$d_choice" in
-                        0) cmd_daemon start; redraw_banner ;;
-                        1) cmd_daemon restart; redraw_banner ;;
-                        2) cmd_daemon stop; redraw_banner ;;
-                        3) cmd_daemon status ;;
-                        4) cmd_daemon logs ;;
+                    clear; print_aiws_banner; echo
+                    local w_choice=0
+                    render_menu "Workstation Operations" "${ws_opts[@]}" || w_choice=$?
+                    if [[ "$w_choice" -eq 255 || "$w_choice" -eq 7 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$w_choice" in
+                        0) cmd_start; load_env 2>/dev/null || true; redraw_banner ;;
+                        1) cmd_stop; load_env 2>/dev/null || true; redraw_banner ;;
+                        2) cmd_status ;;
+                        3) cmd_logs ;;
+                        4) cmd_run ;;
+                        5) cmd_preview ;;
+                        6) cmd_shell ;;
                     esac
-                    
                     prompt_return
                 done
                 continue
                 ;;
-            5) cmd_shell ;;
-            6) cmd_setup ;;
-            7) cmd_edit_configs ;;
-            8) cmd_update ;;
-            9) cmd_uninstall ;;
-            10) 
+            1)
+                while true; do
+                    local proj_opts=(
+                        "List Projects (aiws list)"
+                        "Switch Active Project (aiws use)"
+                        "Add Project from GitHub (aiws add)"
+                        "Remove Project (aiws remove)"
+                        "Git Status (aiws git status)"
+                        "Git Diff (aiws diff)"
+                        "Git Pull (aiws pull)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local p_choice=0
+                    render_menu "Projects & Workspace Management" "${proj_opts[@]}" || p_choice=$?
+                    if [[ "$p_choice" -eq 255 || "$p_choice" -eq 7 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$p_choice" in
+                        0) cmd_list ;;
+                        1)
+                            local existing_projects=()
+                            for p in "$PROJECTS_DIR"/*; do
+                                if [[ -d "$p/.git" ]]; then
+                                    existing_projects+=("$(basename "$p")")
+                                fi
+                            done
+                            if [[ ${#existing_projects[@]} -eq 0 ]]; then
+                                echo -e "\033[33mNo projects found in $PROJECTS_DIR. Use 'Add Project' first.\033[0m"
+                            else
+                                local sel_proj=0
+                                render_menu "Select project to set active" "${existing_projects[@]}" || sel_proj=$?
+                                if [[ "$sel_proj" -ne 255 ]]; then
+                                    cmd_use "${existing_projects[$sel_proj]}"
+                                    load_env 2>/dev/null || true
+                                    redraw_banner
+                                fi
+                            fi
+                            ;;
+                        2)
+                            local repo_url
+                            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Paste GitHub HTTPS repository URL: "; read -r repo_url || true
+                            if [[ -n "$repo_url" ]]; then
+                                cmd_add "$repo_url"
+                                load_env 2>/dev/null || true
+                                redraw_banner
+                            else
+                                echo -e "\n\033[33mNo URL provided. Aborted.\033[0m"
+                            fi
+                            ;;
+                        3)
+                            local existing_projects=()
+                            for p in "$PROJECTS_DIR"/*; do
+                                if [[ -d "$p/.git" ]]; then
+                                    existing_projects+=("$(basename "$p")")
+                                fi
+                            done
+                            if [[ ${#existing_projects[@]} -eq 0 ]]; then
+                                echo -e "\033[33mNo projects found to remove.\033[0m"
+                            else
+                                local sel_rm=0
+                                render_menu "Select project to remove" "${existing_projects[@]}" || sel_rm=$?
+                                if [[ "$sel_rm" -ne 255 ]]; then
+                                    local target_rm="${existing_projects[$sel_rm]}"
+                                    echo -e -n "\n\033[90m[\033[31m!\033[90m]\033[0m Are you sure you want to delete '$target_rm'? [y/N]: "; read -r confirm_rm || true
+                                    if [[ "$confirm_rm" =~ ^[yY] ]]; then
+                                        cmd_remove "$target_rm"
+                                        load_env 2>/dev/null || true
+                                        redraw_banner
+                                    else
+                                        echo "Cancelled."
+                                    fi
+                                fi
+                            fi
+                            ;;
+                        4) cmd_git status ;;
+                        5) cmd_diff ;;
+                        6) cmd_pull ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            2)
+                while true; do
+                    local harness_opts=(
+                        "Harness Status (aiws harness status)"
+                        "Start Harness (aiws harness start)"
+                        "Stop Harness (aiws harness stop)"
+                        "Restart Harness (aiws harness restart)"
+                        "Sync Harness Workspace (aiws harness sync)"
+                        "Update @deepseek-ai/dsh (aiws dsh update)"
+                        "Check DSH Version (aiws dsh version)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local h_choice=0
+                    render_menu "DSH Agent & Harness Runtime" "${harness_opts[@]}" || h_choice=$?
+                    if [[ "$h_choice" -eq 255 || "$h_choice" -eq 7 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$h_choice" in
+                        0) cmd_harness_status ;;
+                        1) cmd_harness_start; redraw_banner ;;
+                        2) cmd_harness_stop; redraw_banner ;;
+                        3) cmd_harness_restart; redraw_banner ;;
+                        4) cmd_harness_sync ;;
+                        5)
+                            local target_v
+                            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Target DSH version [latest/x.y.z] (default: latest): "; read -r target_v || true
+                            cmd_dsh_update "${target_v:-latest}"
+                            ;;
+                        6) cmd_dsh_version ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            3)
+                while true; do
+                    local tunnel_opts=(
+                        "Tunnel Status (aiws tunnel status)"
+                        "Start Tunnel (aiws tunnel start)"
+                        "Stop Tunnel (aiws tunnel stop)"
+                        "Sync Port (aiws tunnel sync)"
+                        "Setup Tunnel Credentials (aiws tunnel setup)"
+                        "View Tunnel Logs (aiws tunnel logs)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local t_choice=0
+                    render_menu "Cloudflare Edge Tunnel" "${tunnel_opts[@]}" || t_choice=$?
+                    if [[ "$t_choice" -eq 255 || "$t_choice" -eq 6 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    if [[ ! -f "$TUNNEL_LIB" ]]; then
+                        echo "Tunnel module missing at $TUNNEL_LIB"
+                        prompt_return
+                        continue
+                    fi
+                    case "$t_choice" in
+                        0) bash "$TUNNEL_LIB" status ;;
+                        1) bash "$TUNNEL_LIB" start && load_env 2>/dev/null || true; redraw_banner ;;
+                        2) bash "$TUNNEL_LIB" stop && load_env 2>/dev/null || true; redraw_banner ;;
+                        3)
+                            local sync_p
+                            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Enter port to forward (default: 3000): "; read -r sync_p || true
+                            bash "$TUNNEL_LIB" sync "${sync_p:-3000}"
+                            ;;
+                        4) bash "$TUNNEL_LIB" setup && load_env 2>/dev/null || true; redraw_banner ;;
+                        5) bash "$TUNNEL_LIB" logs ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            4)
+                while true; do
+                    local gh_opts=(
+                        "GitHub App Status (aiws github status)"
+                        "Test Authentication (aiws github test)"
+                        "Setup GitHub App Credentials (aiws github setup)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local gh_choice=0
+                    render_menu "GitHub App & VCS Integration" "${gh_opts[@]}" || gh_choice=$?
+                    if [[ "$gh_choice" -eq 255 || "$gh_choice" -eq 3 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$gh_choice" in
+                        0) cmd_github status ;;
+                        1) cmd_github test ;;
+                        2) cmd_github setup && load_env 2>/dev/null || true; redraw_banner ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            5)
+                while true; do
+                    local daemon_opts=(
+                        "Daemon Status (aiws daemon status)"
+                        "Start Daemon (aiws daemon start)"
+                        "Restart Daemon (aiws daemon restart)"
+                        "Stop Daemon (aiws daemon stop)"
+                        "View Daemon Logs (aiws daemon logs)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local d_choice=0
+                    render_menu "Manage Host Control Daemon" "${daemon_opts[@]}" || d_choice=$?
+                    if [[ "$d_choice" -eq 255 || "$d_choice" -eq 5 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$d_choice" in
+                        0) cmd_daemon status ;;
+                        1) cmd_daemon start; redraw_banner ;;
+                        2) cmd_daemon restart; redraw_banner ;;
+                        3) cmd_daemon stop; redraw_banner ;;
+                        4) cmd_daemon logs ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            6)
+                while true; do
+                    local sys_opts=(
+                        "Run System Diagnostics (aiws doctor)"
+                        "Check Docker Disk & Cache (aiws cache)"
+                        "Clear Build Cache (aiws cache clear)"
+                        "Clear Cache + Dependencies (aiws cache clear --deps)"
+                        "Deep Clean Cache (aiws cache clear --deps --yes)"
+                        "Export Workspace State (aiws state export)"
+                        "Import Workspace State (aiws state import)"
+                        "Back to Main Menu"
+                    )
+                    clear; print_aiws_banner; echo
+                    local sys_choice=0
+                    render_menu "System Diagnostics, Cache & State" "${sys_opts[@]}" || sys_choice=$?
+                    if [[ "$sys_choice" -eq 255 || "$sys_choice" -eq 7 ]]; then break; fi
+                    clear; print_aiws_banner; echo
+                    case "$sys_choice" in
+                        0) cmd_doctor ;;
+                        1) cmd_cache ;;
+                        2) cmd_cache_clear ;;
+                        3) cmd_cache_clear --deps ;;
+                        4) cmd_cache_clear --deps --yes ;;
+                        5) cmd_state_export ;;
+                        6)
+                            local arch_file
+                            echo -e -n "\n\033[90m[\033[36m?\033[90m]\033[0m Path to backup archive (.tar.gz): "; read -r arch_file || true
+                            if [[ -f "$arch_file" ]]; then
+                                cmd_state_import "$arch_file"
+                            else
+                                echo -e "\n\033[33mFile not found: ${arch_file:-none}\033[0m"
+                            fi
+                            ;;
+                    esac
+                    prompt_return
+                done
+                continue
+                ;;
+            7) cmd_setup ;;
+            8) cmd_edit_configs ;;
+            9) cmd_update; prompt_return ;;
+            10) cmd_uninstall; prompt_return ;;
+            11) 
                print_header "HELP & CLI USAGE"
                print_usage_text 
+               prompt_return
                ;;
-            11) 
+            12) 
                local goodbyes=(
                    "Catch you on the flip side! (⌐■_■)"
                    "Disconnecting from the matrix... [>_ ]"
@@ -2413,10 +2646,6 @@ cmd_tui() {
                exit 0 
                ;;
         esac
-        # Don't prompt to return for interactive sub-menus (5, 6)
-        if [[ "$choice" -ne 10 && "$choice" -ne 5 && "$choice" -ne 6 ]]; then
-            prompt_return
-        fi
     done
 }
 
