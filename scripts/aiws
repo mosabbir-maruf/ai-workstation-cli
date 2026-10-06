@@ -1661,6 +1661,12 @@ cmd_daemon() {
                     fi
                 elif command -v fuser >/dev/null 2>&1; then
                     sudo fuser -k -9 8000/tcp >/dev/null 2>&1 || true
+                elif command -v ss >/dev/null 2>&1; then
+                    local port_pids
+                    port_pids=$(sudo ss -lptn 'sport = :8000' 2>/dev/null | grep -o 'pid=[0-9]*' | awk -F= '{print $2}' | sort -u)
+                    if [[ -n "$port_pids" ]]; then
+                        sudo kill -9 $port_pids 2>/dev/null || true
+                    fi
                 fi
             fi
             
@@ -1670,6 +1676,8 @@ cmd_daemon() {
                     echo "✓ Daemon running via systemd on http://127.0.0.1:8000"
                     return 0
                 fi
+                echo "✗ Failed to start daemon via systemd. Check: journalctl -xeu aiws-daemon"
+                return 1
             fi
             if is_daemon_running; then
                 echo "Daemon already running."
