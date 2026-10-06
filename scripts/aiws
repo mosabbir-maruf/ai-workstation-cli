@@ -1971,18 +1971,20 @@ render_menu() {
 
     while true; do
         tput rc
-        echo -e "\033[1m$prompt\033[0m"
+        echo -e "\n  \033[1m$prompt\033[0m\n"
         for i in "${!options[@]}"; do
             if [[ "$i" -eq "$selected" ]]; then
-                echo -e "  \033[32m\033[1m> ${options[$i]}\033[0m\033[K"
+                echo -e "    \033[36m\033[1m❯ ${options[$i]}\033[0m\033[K"
             else
-                echo -e "    ${options[$i]}\033[K"
+                echo -e "      ${options[$i]}\033[K"
             fi
         done
 
-        read -rsn1 key
+        echo -e "\n  \033[90m[ ↑/↓ or j/k ] Navigate    [ Enter ] Select    [ q ] Quit\033[0m\033[K"
+
+        read -rsn1 key || true
         if [[ "$key" == $'\x1b' ]]; then
-            read -rsn2 -t 0.1 key
+            read -rsn2 -t 0.1 key || true
             if [[ "$key" == "[A" || "$key" == "A" || "$key" == "OA" ]]; then
                 ((selected--))
                 [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
@@ -1996,6 +1998,11 @@ render_menu() {
         elif [[ "$key" == "j" || "$key" == "s" || "$key" == "S" || "$key" == "J" ]]; then
             ((selected++))
             [[ "$selected" -ge ${#options[@]} ]] && selected=0
+        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+            tput cnorm
+            tput rc
+            tput ed
+            exit 0
         elif [[ "$key" == "" ]]; then
             break
         fi
@@ -2033,16 +2040,16 @@ cmd_tui() {
         fi
 
         local main_opts=(
-            "🚀 Start / Restart AIWS"
-            "⏹  Stop AIWS"
-            "📊 Check Status"
-            "📝 View Logs"
-            "💻 Open Shell"
-            "🛠  Setup & Configuration"
-            "☁️  Cloud & Git Integrations"
-            "🔄 Update AIWS CLI"
-            "🗑️  Uninstall AIWS"
-            "❌ Exit"
+            "Start / Restart AIWS"
+            "Stop AIWS"
+            "Check Status"
+            "View Logs"
+            "Open Shell"
+            "Setup & Configuration"
+            "Cloud & Git Integrations"
+            "Update AIWS CLI"
+            "Uninstall AIWS"
+            "Exit"
         )
         
         clear
