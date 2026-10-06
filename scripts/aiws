@@ -2285,6 +2285,7 @@ cmd_tui() {
             "Stop AIWS"
             "Check Status"
             "View Logs"
+            "Manage Daemon"
             "Open Shell"
             "Setup & Configuration"
             "Edit Integrations & Configs"
@@ -2312,16 +2313,49 @@ cmd_tui() {
             1) cmd_stop ;;
             2) cmd_status ;;
             3) cmd_logs ;;
-            4) cmd_shell ;;
-            5) cmd_setup ;;
-            6) cmd_edit_configs ;;
-            7) cmd_update ;;
-            8) cmd_uninstall ;;
-            9) 
+            4)
+                while true; do
+                    local daemon_opts=(
+                        "Start Daemon"
+                        "Restart Daemon"
+                        "Stop Daemon"
+                        "Daemon Status"
+                        "View Daemon Logs"
+                    )
+                    clear
+                    print_aiws_banner
+                    echo
+                    local d_choice=0
+                    render_menu "Manage Host Control Daemon" "${daemon_opts[@]}" || d_choice=$?
+                    
+                    if [[ "$d_choice" -eq 255 ]]; then break; fi
+                    
+                    clear
+                    print_aiws_banner
+                    echo
+                    
+                    case "$d_choice" in
+                        0) cmd_daemon start ;;
+                        1) cmd_daemon restart ;;
+                        2) cmd_daemon stop ;;
+                        3) cmd_daemon status ;;
+                        4) cmd_daemon logs ;;
+                    esac
+                    
+                    prompt_return
+                done
+                continue
+                ;;
+            5) cmd_shell ;;
+            6) cmd_setup ;;
+            7) cmd_edit_configs ;;
+            8) cmd_update ;;
+            9) cmd_uninstall ;;
+            10) 
                print_header "HELP & CLI USAGE"
                print_usage_text 
                ;;
-            10) 
+            11) 
                local goodbyes=(
                    "Catch you on the flip side! (⌐■_■)"
                    "Disconnecting from the matrix... [>_ ]"
