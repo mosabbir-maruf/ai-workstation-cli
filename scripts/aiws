@@ -11,7 +11,7 @@ while [ -L "$RESOLVED_SOURCE" ]; do
     fi
 done
 SCRIPT_ROOT="$(cd "$(dirname "$RESOLVED_SOURCE")/.." && pwd)"
-ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+ROOT="${AIWS_ROOT:-$SCRIPT_ROOT}"
 if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
     ROOT="$SCRIPT_ROOT"
 fi
@@ -47,7 +47,7 @@ load_env() {
 
     local env_image="${IMAGE:-}"
     local env_dsh_version="${DSH_VERSION:-}"
-    local env_root="${AI_WORKSTATION_ROOT:-}"
+    local env_root="${AIWS_ROOT:-}"
 
     set -a
     source "$ENV_FILE"
@@ -55,21 +55,21 @@ load_env() {
 
     [[ -n "$env_image" ]] && IMAGE="$env_image"
     [[ -n "$env_dsh_version" ]] && DSH_VERSION="$env_dsh_version"
-    [[ -n "$env_root" ]] && AI_WORKSTATION_ROOT="$env_root"
+    [[ -n "$env_root" ]] && AIWS_ROOT="$env_root"
 
-    if [[ ! -d "${AI_WORKSTATION_ROOT:-}" || ! -f "${AI_WORKSTATION_ROOT:-}/broker/github_broker.py" ]]; then
-        AI_WORKSTATION_ROOT="$ROOT"
-        if grep -q '^AI_WORKSTATION_ROOT=' "$ENV_FILE" 2>/dev/null; then
-            _sed_i "s|^AI_WORKSTATION_ROOT=.*|AI_WORKSTATION_ROOT=${ROOT}|" "$ENV_FILE"
+    if [[ ! -d "${AIWS_ROOT:-}" || ! -f "${AIWS_ROOT:-}/broker/github_broker.py" ]]; then
+        AIWS_ROOT="$ROOT"
+        if grep -q '^AIWS_ROOT=' "$ENV_FILE" 2>/dev/null; then
+            _sed_i "s|^AIWS_ROOT=.*|AIWS_ROOT=${ROOT}|" "$ENV_FILE"
         fi
     fi
 
     # Dev-server hostname allowlist: explicit value wins, otherwise fall
-    # back to the tunnel app hostname so `ai tunnel setup` wires it up
+    # back to the tunnel app hostname so `aiws tunnel setup` wires it up
     # with no extra step. Empty = local-only.
     ALLOWED_HOSTS="${ALLOWED_HOSTS:-${CLOUDFLARED_APP_HOSTNAME:-}}"
 
-    export IMAGE DSH_VERSION AI_WORKSTATION_ROOT ALLOWED_HOSTS
+    export IMAGE DSH_VERSION AIWS_ROOT ALLOWED_HOSTS
 }
 
 set_env_var() {
@@ -98,19 +98,19 @@ save_env() {
     [[ "$cur_dsh_ver" != "__UNSET__" && -n "$cur_dsh_ver" ]] && DSH_VERSION="$cur_dsh_ver"
     [[ "$cur_api_key" != "__UNSET__" && -n "$cur_api_key" ]] && WORKSTATION_API_KEY="$cur_api_key"
 
-    local workstation_root="${AI_WORKSTATION_ROOT:-$ROOT}"
+    local workstation_root="${AIWS_ROOT:-$ROOT}"
     if [[ ! -d "$workstation_root" || ! -f "$workstation_root/broker/github_broker.py" ]]; then
         workstation_root="$ROOT"
     fi
 
     cat > "$ENV_FILE" <<EOF2
-IMAGE=${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}
+IMAGE=${IMAGE:-ghcr.io/mosabbir-maruf/aiws-cli:latest}
 DSH_VERSION=${DSH_VERSION:-0.1.2-rc.1}
 DSH_TRUSTED_HOSTS=${DSH_TRUSTED_HOSTS:-}
 ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
 ACTIVE_PROJECT=${ACTIVE_PROJECT:-}
 ACTIVE_PROJECT_PATH=${ACTIVE_PROJECT_PATH:-}
-AI_WORKSTATION_ROOT=$workstation_root
+AIWS_ROOT=$workstation_root
 WORKSTATION_API_KEY=${WORKSTATION_API_KEY:-}
 GITHUB_APP_ID=${GITHUB_APP_ID:-}
 GITHUB_INSTALLATION_ID=${GITHUB_INSTALLATION_ID:-}
@@ -133,7 +133,7 @@ compose() {
 require_active() {
     load_env
     [[ -n "${ACTIVE_PROJECT:-}" ]] ||
-        die "No active project. Use: ai use <project>"
+        die "No active project. Use: aiws use <project>"
 
     [[ -d "${ACTIVE_PROJECT_PATH:-}" ]] ||
         die "Active project path does not exist."
@@ -141,7 +141,7 @@ require_active() {
 
 cmd_add() {
     local url="${1:-}"
-    [[ -n "$url" ]] || die "Usage: ai add <github-url>"
+    [[ -n "$url" ]] || die "Usage: aiws add <github-url>"
 
     [[ "$url" =~ ^https://github\.com/[^/]+/[^/]+/?(\.git)?$ ]] ||
         die "Only valid GitHub HTTPS repository URLs are supported."
@@ -167,12 +167,12 @@ cmd_add() {
     fi
 
     echo "Project added: $name"
-    echo "Run: ai use $name"
+    echo "Run: aiws use $name"
 }
 
 cmd_remove() {
     local name="${1:-}"
-    [[ -n "$name" ]] || die "Usage: ai remove <project>"
+    [[ -n "$name" ]] || die "Usage: aiws remove <project>"
 
     [[ "$name" != "." && "$name" != ".." ]] ||
         die "Invalid project name."
@@ -230,7 +230,7 @@ cmd_list() {
 
 cmd_use() {
     local name="${1:-}"
-    [[ -n "$name" ]] || die "Usage: ai use <project>"
+    [[ -n "$name" ]] || die "Usage: aiws use <project>"
 
     local path="$PROJECTS_DIR/$name"
 
@@ -247,7 +247,7 @@ cmd_use() {
     local workstation_running=0
 
     if docker ps --format '{{.Names}}' |
-       grep -qx ai-workstation-cli; then
+       grep -qx aiws-cli; then
         workstation_running=1
     fi
 
@@ -296,7 +296,7 @@ cmd_git() {
 
 cmd_push() {
     local message="${1:-}"
-    [[ -n "$message" ]] || die 'Usage: ai push "commit message"'
+    [[ -n "$message" ]] || die 'Usage: aiws push "commit message"'
 
     require_active
 
@@ -343,13 +343,13 @@ cmd_push() {
 }
 
 harness_exec() {
-    docker exec -i ai-workstation-cli \
+    docker exec -i aiws-cli \
         bash -s -- "$@" < "$ROOT/docker/harness.sh"
 }
 
 cmd_harness_start() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         die "Workstation is not running."
 
     harness_exec start
@@ -357,7 +357,7 @@ cmd_harness_start() {
 
 cmd_harness_stop() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         return 0
 
     harness_exec stop
@@ -365,7 +365,7 @@ cmd_harness_stop() {
 
 cmd_harness_restart() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         die "Workstation is not running."
 
     harness_exec restart
@@ -373,7 +373,7 @@ cmd_harness_restart() {
 
 cmd_harness_sync() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         die "Workstation is not running."
 
     harness_exec sync
@@ -381,7 +381,7 @@ cmd_harness_sync() {
 
 cmd_harness_status() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         {
             echo "Harness: stopped (workstation is not running)"
             return 0
@@ -413,11 +413,11 @@ cmd_start() {
 
     # Wait up to 30 seconds for the container to become running
     local attempts=0
-    while ! docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; do
+    while ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; do
         sleep 1
         attempts=$((attempts + 1))
         if [[ "$attempts" -ge 30 ]]; then
-            die "Container ai-workstation-cli failed to start within 30 seconds."
+            die "Container aiws-cli failed to start within 30 seconds."
         fi
     done
 
@@ -446,7 +446,7 @@ app_container_pid() {
         pid="${pid//[[:space:]]/}"
     fi
 
-    if [[ "$pid" =~ ^[0-9]+$ ]] && docker exec ai-workstation-cli sh -c "kill -0 $pid 2>/dev/null"; then
+    if [[ "$pid" =~ ^[0-9]+$ ]] && docker exec aiws-cli sh -c "kill -0 $pid 2>/dev/null"; then
         echo "$pid"
         return 0
     fi
@@ -454,7 +454,7 @@ app_container_pid() {
     # Fallback: detect running dev-server process inside container (e.g. started via DSH or orphaned)
     local detected_pid
     detected_pid="$(
-        docker exec ai-workstation-cli sh -c '
+        docker exec aiws-cli sh -c '
             ps -eo pid=,args= 2>/dev/null | awk "
                 /node_modules\/\.bin\/(vite|next|nuxt|astro|svelte-kit|webpack|react-scripts|tsx|ts-node|nodemon)|npm run dev|pnpm dev|yarn dev|bun run dev|vite --host|next dev/ && !/awk/ && !/@deepseek-ai\/dsh/ {
                     print \$1; exit
@@ -507,7 +507,7 @@ detect_package_manager() {
 }
 
 container_has_command() {
-    docker exec ai-workstation-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v \"$1\" >/dev/null 2>&1"
+    docker exec aiws-cli sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; command -v \"$1\" >/dev/null 2>&1"
 }
 
 ensure_container_package_manager() {
@@ -527,14 +527,14 @@ ensure_container_package_manager() {
     echo "Package manager '$mgr' not found in container. Installing globally..."
     case "$mgr" in
         pnpm)
-            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g pnpm
+            docker exec aiws-cli npm install --prefix /home/sandbox/.npm-global -g pnpm
             ;;
         yarn)
-            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g yarn
+            docker exec aiws-cli npm install --prefix /home/sandbox/.npm-global -g yarn
             ;;
         bun)
-            docker exec ai-workstation-cli npm install --prefix /home/sandbox/.npm-global -g bun 2>/dev/null || \
-                docker exec ai-workstation-cli sh -c "curl -fsSL https://bun.sh/install | bash"
+            docker exec aiws-cli npm install --prefix /home/sandbox/.npm-global -g bun 2>/dev/null || \
+                docker exec aiws-cli sh -c "curl -fsSL https://bun.sh/install | bash"
             ;;
         *)
             die "Unsupported package manager: $mgr"
@@ -552,8 +552,8 @@ cmd_run() {
     load_env
 
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
-        die "Workstation is not running. Run: ai start"
+        grep -qx aiws-cli ||
+        die "Workstation is not running. Run: aiws start"
 
     if app_running; then
         echo "Project already running."
@@ -636,7 +636,7 @@ cmd_run() {
             *)    die "Unsupported package manager: $manager" ;;
         esac
 
-        docker exec ai-workstation-cli \
+        docker exec aiws-cli \
             sh -c "export PATH=\"/home/sandbox/.npm-global/bin:\$PATH\"; cd /workspace && ($install_cmd)"
 
         echo "Dependencies installed."
@@ -658,7 +658,7 @@ cmd_run() {
         exec_env_flags+=(-e "PORT=${CLOUDFLARED_APP_PORT}")
     fi
 
-    docker exec -d "${exec_env_flags[@]}" ai-workstation-cli \
+    docker exec -d "${exec_env_flags[@]}" aiws-cli \
         /usr/local/bin/app-runner.sh \
         bash -c "$command" >/dev/null
 
@@ -678,8 +678,8 @@ cmd_run() {
         echo >&2
         echo "Recent logs:" >&2
 
-        docker exec ai-workstation-cli \
-            sh -c 'tail -n 80 /run/ai-workstation-cli/app/app.log' >&2 || true
+        docker exec aiws-cli \
+            sh -c 'tail -n 80 /run/aiws-cli/app/app.log' >&2 || true
 
         rm -f "$APP_PID_FILE" "$APP_RUNTIME_DIR/pgid" "$APP_BRIDGE_PID_FILE"
         return 1
@@ -687,12 +687,12 @@ cmd_run() {
 
     echo "Project started."
     echo "PID: $(app_container_pid)"
-    echo "Logs: ai app logs"
+    echo "Logs: aiws app logs"
 }
 
 cmd_app_stop() {
     if ! docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli; then
+        grep -qx aiws-cli; then
         echo "Workstation is not running."
         return 0
     fi
@@ -715,7 +715,7 @@ cmd_app_stop() {
         pgid="${pgid//[[:space:]]/}"
     fi
     if [[ ! "$pgid" =~ ^[0-9]+$ ]]; then
-        pgid="$(docker exec ai-workstation-cli sh -c "ps -o pgid= -p $pid 2>/dev/null | tr -d ' '" 2>/dev/null || true)"
+        pgid="$(docker exec aiws-cli sh -c "ps -o pgid= -p $pid 2>/dev/null | tr -d ' '" 2>/dev/null || true)"
     fi
 
     local bridge_pid=""
@@ -724,7 +724,7 @@ cmd_app_stop() {
         bridge_pid="${bridge_pid//[[:space:]]/}"
     fi
 
-    docker exec ai-workstation-cli sh -c "
+    docker exec aiws-cli sh -c "
         if [ -n '$pgid' ] && [ '$pgid' != '1' ]; then
             kill -TERM -- -$pgid 2>/dev/null || true
         fi
@@ -780,29 +780,29 @@ cmd_app_status() {
 
 cmd_app_logs() {
     docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli ||
+        grep -qx aiws-cli ||
         die "Workstation is not running."
 
-    docker exec ai-workstation-cli \
-        sh -c 'tail -n 100 -f /run/ai-workstation-cli/app/app.log'
+    docker exec aiws-cli \
+        sh -c 'tail -n 100 -f /run/aiws-cli/app/app.log'
 }
 
 cmd_status() {
     load_env
 
-    echo "=== AI Workstation ==="
+    echo "=== AIWS ==="
     echo "Active project: ${ACTIVE_PROJECT:-none}"
     echo "Project path: ${ACTIVE_PROJECT_PATH:-none}"
     echo
 
-    if docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
+    if docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
         echo "Workstation: running"
     else
         echo "Workstation: stopped"
     fi
 
     echo
-    if docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
+    if docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
         harness_exec status || true
     else
         echo "DSH:    stopped"
@@ -820,7 +820,7 @@ cmd_logs() {
 
 cmd_shell() {
     require_active
-    docker exec -it ai-workstation-cli bash
+    docker exec -it aiws-cli bash
 }
 
 cmd_preview() {
@@ -839,7 +839,7 @@ cmd_preview() {
             if bash "$TUNNEL_LIB" sync "$current_port"; then
                 load_env
             else
-                echo "Tunnel sync failed. Run: ai tunnel sync $current_port" >&2
+                echo "Tunnel sync failed. Run: aiws tunnel sync $current_port" >&2
             fi
         fi
 
@@ -872,9 +872,9 @@ cmd_preview() {
     echo
     echo "Project: $ACTIVE_PROJECT"
 
-    if ! docker ps --format '{{.Names}}' | grep -qx ai-workstation-cli; then
+    if ! docker ps --format '{{.Names}}' | grep -qx aiws-cli; then
         echo "Workstation: stopped"
-        echo "Run: ./scripts/ai start"
+        echo "Run: ./scripts/aiws start"
         return 1
     fi
 
@@ -882,7 +882,7 @@ cmd_preview() {
 
     local container_ip
     container_ip="$(
-        docker inspect ai-workstation-cli \
+        docker inspect aiws-cli \
             --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
             2>/dev/null
     )"
@@ -904,10 +904,10 @@ cmd_preview() {
         echo "App: stopped"
         echo
         echo "Run:"
-        echo "  ./scripts/ai run"
+        echo "  ./scripts/aiws run"
         echo
         echo "Then run:"
-        echo "  ./scripts/ai preview"
+        echo "  ./scripts/aiws preview"
         echo
         echo "DSH tunnel:"
         echo "  ssh -N -L 4090:${container_ip}:4091 mosabbir-cloud"
@@ -952,11 +952,11 @@ cmd_dsh_update() {
     cmd_harness_stop || true
 
     if [[ "$version" == "latest" ]]; then
-        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
+        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 aiws-cli \
             npm install --prefix /home/sandbox/.npm-global \
             @deepseek-ai/dsh@latest
     else
-        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
+        docker exec -e NARB_DISABLE_NATIVE_CACHE=1 aiws-cli \
             npm install --prefix /home/sandbox/.npm-global \
             "@deepseek-ai/dsh@$version"
     fi
@@ -967,7 +967,7 @@ cmd_dsh_update() {
 }
 
 cmd_dsh_version() {
-    docker exec -e NARB_DISABLE_NATIVE_CACHE=1 ai-workstation-cli \
+    docker exec -e NARB_DISABLE_NATIVE_CACHE=1 aiws-cli \
         node /home/sandbox/.npm-global/node_modules/@deepseek-ai/dsh/lib/bin.js \
         --version
 }
@@ -1004,9 +1004,9 @@ cmd_cache_clear() {
             --help|-h)
                 cat <<EOF
 Usage:
-  ai cache clear
-  ai cache clear --deps
-  ai cache clear --deps --yes
+  aiws cache clear
+  aiws cache clear --deps
+  aiws cache clear --deps --yes
 
 Safe cleanup:
   - Docker builder cache
@@ -1038,8 +1038,8 @@ EOF
         echo
 
         if docker ps --format '{{.Names}}' |
-            grep -qx ai-workstation-cli; then
-            echo "WARNING: ai-workstation-cli is currently running."
+            grep -qx aiws-cli; then
+            echo "WARNING: aiws-cli is currently running."
             echo "The active app may stop working until dependencies are reinstalled."
             echo
         fi
@@ -1063,8 +1063,8 @@ EOF
     echo "=== Cleaning npm cache ==="
 
     if docker ps --format '{{.Names}}' |
-        grep -qx ai-workstation-cli; then
-        docker exec ai-workstation-cli npm cache clean --force
+        grep -qx aiws-cli; then
+        docker exec aiws-cli npm cache clean --force
     else
         echo "Workstation is not running; npm cache cleanup skipped."
     fi
@@ -1091,7 +1091,7 @@ EOF
 
     echo
     echo "Cache cleanup complete."
-    echo "Run: ai cache"
+    echo "Run: aiws cache"
 }
 
 cmd_update() {
@@ -1110,7 +1110,7 @@ cmd_upgrade() {
 }
 
 cmd_doctor() {
-    echo "=== AI Workstation Doctor ==="
+    echo "=== AIWS Doctor ==="
     echo
 
     local failures=0
@@ -1180,8 +1180,8 @@ cmd_doctor() {
     echo "=== Workstation ==="
 
     if docker ps --format '{{.Names}}' |
-       grep -qx ai-workstation-cli; then
-        container_id="$(docker ps -q -f name=^ai-workstation-cli$)"
+       grep -qx aiws-cli; then
+        container_id="$(docker ps -q -f name=^aiws-cli$)"
         container_status="$(docker inspect -f '{{.State.Status}}' "$container_id")"
         image="$(docker inspect -f '{{.Config.Image}}' "$container_id")"
 
@@ -1333,7 +1333,7 @@ cmd_doctor() {
 }
 
 cmd_state_export() {
-    mkdir -p "$HOME/ai-state-backups"
+    mkdir -p "$HOME/aiws-state-backups"
 
     local timestamp
     local output
@@ -1341,7 +1341,7 @@ cmd_state_export() {
     local manifest
 
     timestamp="$(date +%Y%m%d-%H%M%S)"
-    output="$HOME/ai-state-backups/ai-state-${timestamp}.tar.gz"
+    output="$HOME/aiws-state-backups/aiws-state-${timestamp}.tar.gz"
     staging="$(mktemp -d)"
     manifest="$staging/manifest"
 
@@ -1359,7 +1359,7 @@ cmd_state_export() {
     cp -a "$RUNTIME_DIR/dsh/." "$staging/dsh/"
 
     cat > "$manifest" <<EOF
-AI Workstation State Backup
+AIWS State Backup
 Format: 1
 Created: $(date --iso-8601=seconds)
 DSH Version: ${DSH_VERSION:-unknown}
@@ -1397,7 +1397,7 @@ cmd_state_import() {
     local staging member safe=1
     local backup_env backup_dsh
 
-    [[ -f "$archive" ]] || die "Usage: ai state import <archive>"
+    [[ -f "$archive" ]] || die "Usage: aiws state import <archive>"
     command -v tar >/dev/null || die "tar is required."
 
     staging="$(mktemp -d)"
@@ -1522,7 +1522,7 @@ cmd_state_import() {
 
     echo
     echo "State imported successfully."
-    echo "Run: ./scripts/ai start"
+    echo "Run: ./scripts/aiws start"
 }
 
 cmd_github() {
@@ -1536,7 +1536,7 @@ cmd_github() {
             bash "$GITHUB_LIB" "$@"
             ;;
         *)
-            die "Usage: ai github {setup [app_id] [inst_id] [pem]|ensure-service|status|test}"
+            die "Usage: aiws github {setup [app_id] [inst_id] [pem]|ensure-service|status|test}"
             ;;
     esac
 }
@@ -1560,11 +1560,11 @@ setup_colors() {
 }
 
 has_daemon_systemd() {
-    command -v systemctl >/dev/null 2>&1 && [[ -f "/etc/systemd/system/ai-workstation-daemon.service" ]]
+    command -v systemctl >/dev/null 2>&1 && [[ -f "/etc/systemd/system/aiws-daemon.service" ]]
 }
 
 is_daemon_running() {
-    if has_daemon_systemd && systemctl is-active --quiet ai-workstation-daemon 2>/dev/null; then
+    if has_daemon_systemd && systemctl is-active --quiet aiws-daemon 2>/dev/null; then
         return 0
     fi
     local pid_file="$RUNTIME_DIR/daemon.pid"
@@ -1581,7 +1581,7 @@ cmd_daemon() {
     local daemon_script="$ROOT/daemon/server.py"
     local daemon_pid_file="$RUNTIME_DIR/daemon.pid"
     local daemon_log_file="$RUNTIME_DIR/daemon.log"
-    local service_name="ai-workstation-daemon"
+    local service_name="aiws-daemon"
 
     case "$action" in
         start)
@@ -1596,7 +1596,7 @@ cmd_daemon() {
                 echo "Daemon already running."
                 return 0
             fi
-            echo "Starting AI Workstation Host Control Daemon..."
+            echo "Starting AIWS Host Control Daemon..."
             mkdir -p "$RUNTIME_DIR"
             python3 "$daemon_script" >> "$daemon_log_file" 2>&1 &
             echo $! > "$daemon_pid_file"
@@ -1660,7 +1660,7 @@ cmd_daemon() {
             fi
             ;;
         *)
-            die "Usage: ai daemon {start|stop|restart|status|logs}"
+            die "Usage: aiws daemon {start|stop|restart|status|logs}"
             ;;
     esac
 }
@@ -1669,7 +1669,7 @@ print_aiws_banner() {
     setup_colors
     load_env 2>/dev/null || true
 
-    local subtitle="${1:-AI Workstation CLI · Containerized Dev & Agent Runtime}"
+    local subtitle="${1:-AIWS CLI · Containerized Dev & Agent Runtime}"
     local proj_badge github_badge tunnel_badge daemon_badge
     if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
         proj_badge="${_C_GREEN}${ACTIVE_PROJECT}${_C_RESET}"
@@ -1771,12 +1771,12 @@ cmd_setup() {
         echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Not configured${_C_RESET}"
     fi
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure GitHub App (App ID, Installation ID, .pem key)"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai github setup' anytime later)"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws github setup' anytime later)"
     read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step2_choice || true
 
     case "${step2_choice:-s}" in
         1)
-            cmd_github setup && load_env || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: ai github setup${_C_RESET}"
+            cmd_github setup && load_env || echo "   ${_C_YELLOW}! GitHub setup incomplete — you can retry anytime with: aiws github setup${_C_RESET}"
             ;;
         *)
             echo "   ${_C_DIM}↷ Skipped Step 2.${_C_RESET}"
@@ -1795,13 +1795,13 @@ cmd_setup() {
         echo "${_C_CYAN}│${_C_RESET}  Current status: ${_C_YELLOW}Local-only mode (no tunnel configured)${_C_RESET}"
     fi
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Configure Cloudflare Tunnel token & hostnames"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai tunnel setup' anytime later)"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws tunnel setup' anytime later)"
     read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/s] (default: s): " step3_choice || true
 
     case "${step3_choice:-s}" in
         1)
             if [[ -f "$TUNNEL_LIB" ]]; then
-                bash "$TUNNEL_LIB" setup && load_env || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: ai tunnel setup${_C_RESET}"
+                bash "$TUNNEL_LIB" setup && load_env || echo "   ${_C_YELLOW}! Tunnel setup incomplete — retry anytime with: aiws tunnel setup${_C_RESET}"
             fi
             ;;
         *)
@@ -1811,7 +1811,7 @@ cmd_setup() {
     echo
 
     # ------------------------------------------------------------------
-    # STEP 4/5: First Project Workspace (ai add / ai use)
+    # STEP 4/5: First Project Workspace (aiws add / aiws use)
     # ------------------------------------------------------------------
     echo "${_C_CYAN}╭─ [Step 4/5] Workspace Project Onboarding${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Clone a GitHub repository into ~/projects and mount it as your active /workspace."
@@ -1822,7 +1822,7 @@ cmd_setup() {
     fi
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Clone a GitHub repository URL and activate it"
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Select an existing project from ~/projects"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'ai add <url>' & 'ai use <name>' later)"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step (run 'aiws add <url>' & 'aiws use <name>' later)"
     read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: s): " step4_choice || true
 
     case "${step4_choice:-s}" in
@@ -1860,8 +1860,8 @@ cmd_setup() {
     # ------------------------------------------------------------------
     echo "${_C_CYAN}╭─ [Step 5/5] Launch Runtime & System Doctor${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  Start the Docker sandbox container, DSH Agent Harness (:4091), and verify host health."
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Start runtime & run 'ai doctor' health check now"
-    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Run 'ai doctor' health check only"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[1]${_C_RESET} Start runtime & run 'aiws doctor' health check now"
+    echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[2]${_C_RESET} Run 'aiws doctor' health check only"
     echo "${_C_CYAN}│${_C_RESET}  ${_C_BOLD}[s]${_C_RESET} Skip this step"
     read -r -p "${_C_CYAN}╰─>${_C_RESET} Select option [1/2/s] (default: 1): " step5_choice || true
 
@@ -1871,7 +1871,7 @@ cmd_setup() {
             if [[ -n "${ACTIVE_PROJECT:-}" ]]; then
                 cmd_start || true
             else
-                echo "   ${_C_YELLOW}! No active project set yet — running 'ai doctor' instead of 'ai start'.${_C_RESET}"
+                echo "   ${_C_YELLOW}! No active project set yet — running 'aiws doctor' instead of 'aiws start'.${_C_RESET}"
                 cmd_doctor || true
             fi
             ;;
@@ -1888,10 +1888,10 @@ cmd_setup() {
     echo "${_C_CYAN}╭──────────────────────────────────────────────────────────────────╮${_C_RESET}"
     echo "${_C_CYAN}│${_C_RESET}  ${_C_GREEN}${_C_BOLD}✓ AIWS CLI Onboarding Flow Complete!${_C_RESET}                            ${_C_CYAN}│${_C_RESET}"
     echo "${_C_CYAN}├──────────────────────────────────────────────────────────────────┤${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}ai setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}ai status${_C_RESET} / ${_C_BOLD}ai doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}ai preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
-    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}ai shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Re-run this wizard anytime:   ${_C_BOLD}aiws setup${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Check workstation status:     ${_C_BOLD}aiws status${_C_RESET} / ${_C_BOLD}aiws doctor${_C_RESET}           ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • View live preview URLs:       ${_C_BOLD}aiws preview${_C_RESET}                      ${_C_CYAN}│${_C_RESET}"
+    echo "${_C_CYAN}│${_C_RESET}  • Enter container shell:        ${_C_BOLD}aiws shell${_C_RESET}                        ${_C_CYAN}│${_C_RESET}"
     echo "${_C_CYAN}╰──────────────────────────────────────────────────────────────────╯${_C_RESET}"
     echo
 }
@@ -1901,43 +1901,167 @@ usage() {
     cat <<EOF2
 
 ${_C_BOLD}Onboarding & Setup:${_C_RESET}
-  ai setup                  Launch interactive flow-style setup wizard (skippable steps)
-  ai doctor                 Run full host, container, DSH & broker diagnostics
+  aiws setup                  Launch interactive flow-style setup wizard (skippable steps)
+  aiws doctor                 Run full host, container, DSH & broker diagnostics
 
 ${_C_BOLD}Projects:${_C_RESET}
-  ai add <github-url>       Clone a GitHub repository into ~/projects
-  ai use <project>          Set active project and mount into /workspace
-  ai list                   List all cloned projects
-  ai remove <project>       Remove a project from ~/projects
+  aiws add <github-url>       Clone a GitHub repository into ~/projects
+  aiws use <project>          Set active project and mount into /workspace
+  aiws list                   List all cloned projects
+  aiws remove <project>       Remove a project from ~/projects
 
 ${_C_BOLD}Git (Zero-PAT Broker):${_C_RESET}
-  ai diff                   Show working tree status and diff in active project
-  ai pull                   Pull latest changes in active project
-  ai push "commit message"  Stage, commit, and push changes
+  aiws diff                   Show working tree status and diff in active project
+  aiws pull                   Pull latest changes in active project
+  aiws push "commit message"  Stage, commit, and push changes
 
 ${_C_BOLD}Runtime & App:${_C_RESET}
-  ai start | stop | restart Manage container & DSH runtime
-  ai status | logs | shell  Inspect container state, logs, or open interactive bash
-  ai run                    Auto-detect and start project dev server in background
-  ai app {stop|restart|status|logs}
-  ai preview                Show local and Cloudflare Tunnel URLs for active ports
+  aiws start | stop | restart Manage container & DSH runtime
+  aiws status | logs | shell  Inspect container state, logs, or open interactive bash
+  aiws run                    Auto-detect and start project dev server in background
+  aiws app {stop|restart|status|logs}
+  aiws preview                Show local and Cloudflare Tunnel URLs for active ports
 
 ${_C_BOLD}DSH Agent Harness:${_C_RESET}
-  ai harness {start|stop|restart|status|sync}
-  ai dsh update [version]   Update @deepseek-ai/dsh inside persistent volume
-  ai dsh version            Print active DSH version
+  aiws harness {start|stop|restart|status|sync}
+  aiws dsh update [version]   Update @deepseek-ai/dsh inside persistent volume
+  aiws dsh version            Print active DSH version
 
 ${_C_BOLD}Integrations & Daemon:${_C_RESET}
-  ai github {setup|status|test}
-  ai tunnel {setup|sync [port]|status|start|stop|logs}
-  ai daemon {start|stop|restart|status|logs}
-  ai state {export|import <archive>}
-  ai cache [clear [--deps] [--yes]]
-  ai update | upgrade
+  aiws github {setup|status|test}
+  aiws tunnel {setup|sync [port]|status|start|stop|logs}
+  aiws daemon {start|stop|restart|status|logs}
+  aiws state {export|import <archive>}
+  aiws cache [clear [--deps] [--yes]]
+  aiws update | upgrade
 EOF2
 }
 
+# --------------------------------------------------
+# Interactive TUI Menu System
+# --------------------------------------------------
+render_menu() {
+    local prompt="$1"
+    shift
+    local options=("$@")
+    local selected=0
+    local key
+
+    tput civis
+    tput sc
+
+    trap 'tput cnorm; echo; exit 1' INT
+
+    while true; do
+        tput rc
+        echo -e "\033[1m$prompt\033[0m"
+        for i in "${!options[@]}"; do
+            if [[ "$i" -eq "$selected" ]]; then
+                echo -e "  \033[32m\033[1m> ${options[$i]}\033[0m\033[K"
+            else
+                echo -e "    ${options[$i]}\033[K"
+            fi
+        done
+
+        read -rsn1 key
+        if [[ "$key" == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 key
+            if [[ "$key" == "[A" || "$key" == "A" ]]; then
+                ((selected--))
+                [[ "$selected" -lt 0 ]] && selected=$((${#options[@]} - 1))
+            elif [[ "$key" == "[B" || "$key" == "B" ]]; then
+                ((selected++))
+                [[ "$selected" -ge ${#options[@]} ]] && selected=0
+            fi
+        elif [[ "$key" == "" ]]; then
+            break
+        fi
+    done
+
+    tput cnorm
+    tput rc
+    tput ed
+    return "$selected"
+}
+
+cmd_tui() {
+    load_env 2>/dev/null || true
+    local is_setup_mode=0
+    if [[ "${1:-}" == "--setup" ]]; then
+        is_setup_mode=1
+    elif [[ ! -f "$RUNTIME_DIR/.setup_done" && -z "${ACTIVE_PROJECT:-}" ]]; then
+        is_setup_mode=1
+    fi
+
+    while true; do
+        if [[ "$is_setup_mode" -eq 1 ]]; then
+            local setup_opts=("Yes, start Setup Wizard" "Skip for now")
+            clear
+            print_aiws_banner
+            echo
+            render_menu "First-time installation detected. Start guided setup?" "${setup_opts[@]}"
+            local choice=$?
+            if [[ "$choice" -eq 0 ]]; then
+                cmd_setup
+            fi
+            is_setup_mode=0
+            touch "$RUNTIME_DIR/.setup_done"
+            continue
+        fi
+
+        local main_opts=(
+            "🚀 Start / Restart AIWS"
+            "⏹  Stop AIWS"
+            "📊 Check Status"
+            "📝 View Logs"
+            "💻 Open Shell"
+            "🛠  Setup & Configuration"
+            "☁️  Cloud & Git Integrations"
+            "🔄 Update AIWS CLI"
+            "❌ Exit"
+        )
+        
+        clear
+        print_aiws_banner
+        echo
+        
+        render_menu "Interactive AIWS Dashboard (Use Arrow Keys)" "${main_opts[@]}"
+        local choice=$?
+        
+        clear
+        print_aiws_banner
+        echo
+
+        case "$choice" in
+            0) cmd_start ;;
+            1) cmd_stop ;;
+            2) cmd_status ;;
+            3) cmd_logs ;;
+            4) cmd_shell ;;
+            5) cmd_setup ;;
+            6) 
+               local tunnel_opts=("GitHub App Setup" "Cloudflare Tunnel Setup" "Back to Main Menu")
+               render_menu "Cloud & Git Integrations" "${tunnel_opts[@]}"
+               local tun_choice=$?
+               if [[ "$tun_choice" -eq 0 ]]; then
+                   cmd_github setup
+               elif [[ "$tun_choice" -eq 1 ]]; then
+                   [[ -f "$TUNNEL_LIB" ]] && bash "$TUNNEL_LIB" setup || echo "Tunnel module missing."
+               fi
+               ;;
+            7) cmd_update ;;
+            8) echo "Goodbye!"; exit 0 ;;
+        esac
+        
+        if [[ "$choice" -ne 8 ]]; then
+            echo
+            read -r -p "Press Enter to return to menu..."
+        fi
+    done
+}
+
 case "${1:-}" in
+    tui) shift; cmd_tui "$@" ;;
     banner) shift; print_aiws_banner "$@" ;;
     setup|init|onboard) shift; cmd_setup "$@" ;;
     add) shift; cmd_add "$@" ;;
@@ -1970,7 +2094,7 @@ case "${1:-}" in
                 cmd_harness_sync
                 ;;
             *)
-                die "Usage: ai harness {start|stop|restart|status|sync}"
+                die "Usage: aiws harness {start|stop|restart|status|sync}"
                 ;;
         esac
         ;;
@@ -1994,7 +2118,7 @@ case "${1:-}" in
                 cmd_app_logs
                 ;;
             *)
-                die "Usage: ai app {stop|restart|status|logs}"
+                die "Usage: aiws app {stop|restart|status|logs}"
                 ;;
         esac
         ;;
@@ -2010,7 +2134,7 @@ case "${1:-}" in
                 cmd_dsh_version
                 ;;
             *)
-                die "Usage: ai dsh {update|version}"
+                die "Usage: aiws dsh {update|version}"
                 ;;
         esac
         ;;
@@ -2026,7 +2150,7 @@ case "${1:-}" in
                 cmd_cache
                 ;;
             *)
-                die "Usage: ai cache [clear [--deps] [--yes]]"
+                die "Usage: aiws cache [clear [--deps] [--yes]]"
                 ;;
         esac
         ;;
@@ -2046,7 +2170,7 @@ case "${1:-}" in
                 bash "$TUNNEL_LIB" "$@"
                 ;;
             *)
-                die "Usage: ai tunnel {setup|sync [port]|status|start|stop|logs}"
+                die "Usage: aiws tunnel {setup|sync [port]|status|start|stop|logs}"
                 ;;
         esac
         ;;
@@ -2059,7 +2183,7 @@ case "${1:-}" in
                 cmd_state_import "$@"
                 ;;
             *)
-                die "Usage: ai state {export|import}"
+                die "Usage: aiws state {export|import}"
                 ;;
         esac
         ;;
@@ -2068,19 +2192,11 @@ case "${1:-}" in
         cmd_daemon "${1:-status}"
         ;;
     "")
-        load_env 2>/dev/null || true
-        if [[ -t 0 && -t 1 && ! -f "$RUNTIME_DIR/.setup_done" && -z "${ACTIVE_PROJECT:-}" ]]; then
-            print_aiws_banner
-            echo
-            read -r -p "First-time setup detected! Start the guided AIWS Setup Flow now? [Y/n]: " _first_run_ans || true
-            if [[ "${_first_run_ans:-Y}" =~ ^[Yy]$ ]]; then
-                cmd_setup
-                exit 0
-            else
-                touch "$RUNTIME_DIR/.setup_done"
-            fi
+        if [[ -t 0 && -t 1 ]]; then
+            cmd_tui
+        else
+            usage
         fi
-        usage
         ;;
     help|--help|-h) usage ;;
     *) die "Unknown command: $1" ;;

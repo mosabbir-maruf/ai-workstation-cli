@@ -1,4 +1,4 @@
-name: Build AI Workstation
+name: Build AIWS
 
 on:
   push:
@@ -15,11 +15,11 @@ permissions:
   packages: write
 
 concurrency:
-  group: ai-workstation-cli-image
+  group: aiws-cli-image
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/ai-workstation-cli
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aiws-cli
   RETAIN_IMAGE_VERSIONS: 2
 
 jobs:
@@ -57,8 +57,8 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           labels: |
-            org.opencontainers.image.title=AI Workstation CLI
-            org.opencontainers.image.description=Docker container environment for AI Workstation CLI
+            org.opencontainers.image.title=AIWS CLI
+            org.opencontainers.image.description=Docker container environment for AIWS CLI
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha
@@ -82,7 +82,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const packageName = "ai-workstation-cli";
+            const packageName = "aiws-cli";
             const keepImages = Number(process.env.RETAIN_IMAGE_VERSIONS || "2");
 
             console.log(`Package: ${packageName}`);

@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The **AI Workstation** project prioritizes the defense-in-depth isolation of developer environments running on remote Linux servers. Because the workstation executes AI-assisted development tools, arbitrary project builds, and dependencies, security boundaries are designed to constrain the blast radius of untrusted code while avoiding credential leakage to the container runtime.
+The **AIWS** project prioritizes the defense-in-depth isolation of developer environments running on remote Linux servers. Because the workstation executes AI-assisted development tools, arbitrary project builds, and dependencies, security boundaries are designed to constrain the blast radius of untrusted code while avoiding credential leakage to the container runtime.
 
 ---
 
@@ -20,7 +20,7 @@ Security fixes are actively provided for the following versions:
 
 ## 3. Reporting a Vulnerability
 
-If you discover a security vulnerability in AI Workstation, please report it privately.
+If you discover a security vulnerability in AIWS, please report it privately.
 
 ### Preferred Reporting Mechanism
 
@@ -34,7 +34,7 @@ If you discover a security vulnerability in AI Workstation, please report it pri
 
 ## 4. What NOT to Disclose Publicly
 
-To protect users and operators of AI Workstation, never share the following in public issues, discussions, or pull requests:
+To protect users and operators of AIWS, never share the following in public issues, discussions, or pull requests:
 
 - Zero-day exploits or unmitigated vulnerability reproduction steps.
 - Real private keys (`*.pem`, `*.key`), API tokens, or webhook secrets.
@@ -48,7 +48,7 @@ To protect users and operators of AI Workstation, never share the following in p
 To help us triage and remediate the issue promptly, include:
 
 1. **Vulnerability Type**: A description of the problem (e.g., path traversal, privilege escalation, credential leakage, socket permission bypass).
-2. **Affected Component**: Specific file(s) and lines involved (e.g., `scripts/ai`, `broker/github_broker.py`, `docker/compose.yml`).
+2. **Affected Component**: Specific file(s) and lines involved (e.g., `scripts/aiws`, `broker/github_broker.py`, `docker/compose.yml`).
 3. **Environment Details**: Host OS distribution, Docker version, Docker Compose version, architecture (`linux/arm64`), and DSH version.
 4. **Step-by-Step Proof of Concept (PoC)**: Minimal, sanitized steps or script to reproduce the vulnerability.
 5. **Impact Assessment**: What an attacker or compromised container workload could achieve.
@@ -72,7 +72,7 @@ When a report is received:
 
 The following areas are in-scope for security reviews:
 
-- **Host CLI (`scripts/ai`)**: Command execution, environment variable handling, path validation, and sanitization routines.
+- **Host CLI (`scripts/aiws`)**: Command execution, environment variable handling, path validation, and sanitization routines.
 - **Broker Daemon (`broker/github_broker.py`)**: Socket creation, permission handling (`0660`), request parsing, JWT generation, and token delivery.
 - **Container Isolation (`docker/compose.yml`, `docker/Dockerfile`)**: User separation, capability configuration, mount scope, and resource constraints.
 - **State Export/Import (`cmd_state_export`, `cmd_state_import`)**: Archive inspection, path traversal protection, symlink validation, and hardlink prevention.
@@ -87,7 +87,7 @@ The system enforces four distinct operational boundaries:
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 1. Host Management Layer                                                    │
-│    - Host OS (Ubuntu), Docker daemon, sudoers, scripts/ai, host user        │
+│    - Host OS (Ubuntu), Docker daemon, sudoers, scripts/aiws, host user        │
 │    - Host-only secrets: .env, secrets/github-app.pem                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ 2. Workstation Container                                                    │
@@ -142,7 +142,7 @@ Instead of storing long-lived Personal Access Tokens (PATs) or SSH private keys 
 
 ### Sensitive File Pre-Commit Guardrail
 
-The CLI command `ai push` performs automated pre-commit scanning on staged files before creating a commit. It aborts if sensitive filenames match patterns such as:
+The CLI command `aiws push` performs automated pre-commit scanning on staged files before creating a commit. It aborts if sensitive filenames match patterns such as:
 - `.env` or `.env.*` (excluding `.env.example`)
 - `*.pem`, `*.key`, `*.p12`, `*.pfx`
 - `credentials.json`, `service-account*.json`
@@ -186,16 +186,16 @@ Secrets must **never** be checked into version control.
 
 ## 13. Host Control Daemon & Docker Security
 
-- **Host Daemon Authentication**: When the web control daemon (`ai daemon`) is exposed via reverse proxy or Cloudflare Tunnel, `WORKSTATION_API_KEY` must be configured in `.env`. All incoming requests require valid Bearer token authorization verified via constant-time comparison (`secrets.compare_digest`). Unauthenticated requests are rejected with `401 Unauthorized` before executing system calls.
+- **Host Daemon Authentication**: When the web control daemon (`aiws daemon`) is exposed via reverse proxy or Cloudflare Tunnel, `WORKSTATION_API_KEY` must be configured in `.env`. All incoming requests require valid Bearer token authorization verified via constant-time comparison (`secrets.compare_digest`). Unauthenticated requests are rejected with `401 Unauthorized` before executing system calls.
 - **Host Daemon Protection**: Access to the host Docker daemon should be restricted to administrative users.
-- **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>`) in production environments rather than mutable `latest` tags.
+- **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>`) in production environments rather than mutable `latest` tags.
 - **Local Port Bindings**: Ports configured in `compose.yml` (`3000`, `3001`, `8000`, `4090:4091`) must always bind to `127.0.0.1` on the host, never `0.0.0.0`.
 
 ---
 
 ## 14. State Export and Import Security
 
-The `ai state export` and `ai state import` commands back up and restore DSH workflow state. Because archive extraction presents path traversal and execution risks, the import process enforces:
+The `aiws state export` and `aiws state import` commands back up and restore DSH workflow state. Because archive extraction presents path traversal and execution risks, the import process enforces:
 
 1. **Archive Content Validation**: Rejects archives containing files outside `manifest`, `.env`, and `dsh/*`.
 2. **Path Traversal Checks**: Rejects absolute paths (`/*`) and relative traversal elements (`../`, `*/../*`).
@@ -220,10 +220,10 @@ We believe in responsible, coordinated disclosure:
 
 ## 16. Security Limitations and Out-of-Scope Areas
 
-While AI Workstation implements robust defense-in-depth, operators should understand its inherent boundaries:
+While AIWS implements robust defense-in-depth, operators should understand its inherent boundaries:
 
 - **Container vs. Hypervisor Isolation**: Docker containers share the host Linux kernel. Container isolation does not provide the same hard boundary as a Type-1 or Type-2 hypervisor against kernel-level privilege escalation (e.g., zero-day kernel vulnerabilities).
 - **Compromised Host User**: If an attacker gains root or host user access on the VPS, all security boundaries are compromised.
 - **Malicious Code in Active Project**: The workstation container allows the active project to execute node/npm scripts. Malicious packages within `/workspace` can consume allocated container resources or read files within the active project directory.
-- **Third-Party Package Ecosystem**: Vulnerabilities in upstream packages (such as Node.js, DeepSeek Harness, npm packages, or Linux packages) are out of scope unless they stem from AI Workstation's integration.
+- **Third-Party Package Ecosystem**: Vulnerabilities in upstream packages (such as Node.js, DeepSeek Harness, npm packages, or Linux packages) are out of scope unless they stem from AIWS's integration.
 

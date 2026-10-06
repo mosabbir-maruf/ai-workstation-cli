@@ -56,9 +56,9 @@ RUN chmod 0755 \
     /usr/local/bin/harness.sh \
     /usr/local/bin/github-app-credential-helper
 
-LABEL org.opencontainers.image.title="AI Workstation CLI" \
-      org.opencontainers.image.description="Docker container environment for AI Workstation CLI" \
-      org.opencontainers.image.source="https://github.com/mosabbir-maruf/ai-workstation-cli" \
+LABEL org.opencontainers.image.title="AIWS CLI" \
+      org.opencontainers.image.description="Docker container environment for AIWS CLI" \
+      org.opencontainers.image.source="https://github.com/mosabbir-maruf/aiws-cli" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /workspace

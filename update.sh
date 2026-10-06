@@ -14,8 +14,8 @@ ROOT="$(cd "$(dirname "$RESOLVED_SOURCE")" && pwd)"
 
 git -C "$ROOT" pull --ff-only
 
-if command -v ai >/dev/null 2>&1; then
-    ai upgrade
+if command -v aiws >/dev/null 2>&1; then
+    aiws upgrade
 else
     "$ROOT/install.sh"
 fi

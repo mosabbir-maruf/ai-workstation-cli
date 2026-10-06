@@ -1,21 +1,21 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="AI Workstation Logo" width="120" height="120" />
+  <img src="docs/assets/logo.svg" alt="AIWS Logo" width="120" height="120" />
 </p>
 
-<h1 align="center">AI Workstation</h1>
+<h1 align="center">AIWS</h1>
 
 ---
 
 <p align="center">
   <strong>A secure and reusable development workstation for VPS, with isolated Docker projects, DeepSeek Harness, GitHub App authentication, SSH previews, and simple lifecycle management.</strong>
   <br />
-  <em>Looking for the web console? Check out the <a href="https://github.com/mosabbir-maruf/ai-workstation">AI Workstation Web Interface</a>.</em>
+  <em>Looking for the web console? Check out the <a href="https://github.com/mosabbir-maruf/aiws">AIWS Web Interface</a>.</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml"><img src="https://github.com/mosabbir-maruf/ai-workstation-cli/actions/workflows/image.yml/badge.svg" alt="Build AI Workstation" /></a>
-  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli/pkgs/container/ai-workstation-cli"><img src="https://img.shields.io/badge/GHCR-ai--workstation--cli-blue?logo=docker" alt="Docker Image" /></a>
-  <a href="https://github.com/mosabbir-maruf/ai-workstation-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
+  <a href="https://github.com/mosabbir-maruf/aiws-cli/actions/workflows/image.yml"><img src="https://github.com/mosabbir-maruf/aiws-cli/actions/workflows/image.yml/badge.svg" alt="Build AIWS" /></a>
+  <a href="https://github.com/mosabbir-maruf/aiws-cli/pkgs/container/aiws-cli"><img src="https://img.shields.io/badge/GHCR-ai--workstation--cli-blue?logo=docker" alt="Docker Image" /></a>
+  <a href="https://github.com/mosabbir-maruf/aiws-cli"><img src="https://img.shields.io/badge/platform-linux%2Famd64%2Carm64-informational" alt="Platform" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/runtime-Docker-blue" alt="Runtime" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black" alt="AI Runtime" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
@@ -63,7 +63,7 @@
 
 ## Overview
 
-AI Workstation provides one reusable development environment on a remote Linux VPS.
+AIWS provides one reusable development environment on a remote Linux VPS.
 
 Projects remain ordinary Git repositories on the host under `~/projects/`. Only the currently selected project is mounted into the workstation container at `/workspace`.
 
@@ -71,7 +71,7 @@ The workstation contains the common developer runtime and DeepSeek Harness. DSH 
 
 The system has four major boundaries:
 
-1. **Host management layer** — Docker, projects, runtime state, secrets, and the `ai` CLI.
+1. **Host management layer** — Docker, projects, runtime state, secrets, and the `aiws` CLI.
 2. **Workstation container** — isolated developer runtime plus the selected project.
 3. **GitHub broker** — GitHub App credential flow through a Unix socket instead of a PAT or host SSH key inside the container.
 4. **Existing infrastructure** — the existing gateway/reverse-proxy stack remains separate.
@@ -102,9 +102,9 @@ The system has four major boundaries:
 │                            Ubuntu VPS / Host                               │
 │                                                                            │
 │  ┌──────────────────────┐       ┌───────────────────────────────────────┐  │
-│  │ ~/projects/          │       │ ~/ai-workstation-cli/                 │  │
+│  │ ~/projects/          │       │ ~/aiws-cli/                 │  │
 │  │                      │       │                                       │  │
-│  │ project-a/           │       │ scripts/ai                            │  │
+│  │ project-a/           │       │ scripts/aiws                            │  │
 │  │ project-b/           │       │ docker/                               │  │
 │  │ active-project/ ─────┼──────►│ runtime/                              │  │
 │  │                      │       │ secrets/                              │  │
@@ -114,7 +114,7 @@ The system has four major boundaries:
 │             │ /workspace mount                   │ Docker Compose          │
 │             ▼                                    ▼                         │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                          ai-workstation-cli                          │  │
+│  │                          aiws-cli                          │  │
 │  │                                                                      │  │
 │  │  User: sandbox (UID 1001)                                            │  │
 │  │  Node.js + Git + SSH client + ripgrep + fd + procps + tini           │  │
@@ -147,7 +147,7 @@ Mac / operator
      │
      │ SSH
      ▼
-Host CLI: ai
+Host CLI: aiws
      │
      ├── project selection
      ├── Git operations
@@ -172,7 +172,7 @@ Docker workstation
 
 | Component | Responsibility | Persistence |
 |---|---|---|
-| `scripts/ai` | Main operator CLI | Git |
+| `scripts/aiws` | Main operator CLI | Git |
 | `docker/Dockerfile` | Base workstation image | Git / GHCR |
 | `docker/compose.yml` | Runtime, mounts, limits, ports | Git |
 | `docker/entrypoint.sh` | Container bootstrap and DSH installation | Git |
@@ -264,7 +264,7 @@ Never commit private keys, tokens, credentials, or `.env`.
 ## Repository Structure
 
 ```text
-ai-workstation-cli/
+aiws-cli/
 ├── .env.example                     # Environment template
 ├── .gitignore                       # Ignored secrets, runtime, and OS files
 ├── CONTRIBUTING.md                  # Contributor guidelines
@@ -302,7 +302,7 @@ ai-workstation-cli/
 │   └── github-app-credential-helper# Container-side credential helper
 │
 └── scripts/
-    ├── ai                           # Main CLI
+    ├── aiws                           # Main CLI
     ├── github-app-credential-helper # Host-side credential helper
     └── lib/
         ├── github.sh                # GitHub App/broker helpers
@@ -319,7 +319,7 @@ ai-workstation-cli/
 
 ```text
 ~/
-├── ai-workstation-cli/
+├── aiws-cli/
 │   ├── .env
 │   ├── .venv/
 │   ├── runtime/
@@ -370,8 +370,8 @@ The included installer validates Docker, Git, Python 3, Docker daemon access, an
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git ~/ai-workstation-cli
-cd ~/ai-workstation-cli
+git clone https://github.com/mosabbir-maruf/aiws-cli.git ~/aiws-cli
+cd ~/aiws-cli
 ```
 
 ---
@@ -390,16 +390,16 @@ The installer:
 4. creates `.env` from `.env.example`;
 5. creates the Python virtual environment;
 6. installs the required Python dependency;
-7. installs `ai` at `/usr/local/bin/ai`;
+7. installs `aiws` at `/usr/local/bin/aiws`;
 8. validates the resulting installation.
 
 Then:
 
 ```bash
-ai doctor
-ai github setup
-ai github status
-ai github test
+aiws doctor
+aiws github setup
+aiws github status
+aiws github test
 ```
 
 ---
@@ -409,11 +409,11 @@ ai github test
 `.env.example` currently contains:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
+IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:latest
 DSH_VERSION=0.1.2-rc.1
 ACTIVE_PROJECT=
 ACTIVE_PROJECT_PATH=
-AI_WORKSTATION_ROOT=
+AIWS_ROOT=
 DSH_TRUSTED_HOSTS=
 ALLOWED_HOSTS=
 GITHUB_APP_ID=
@@ -448,12 +448,12 @@ Full walkthrough (App creation, private-key generation, copying the key to the V
 Quick reference (on the VPS):
 
 ```bash
-ai github setup
-ai github status
-ai github test
+aiws github setup
+aiws github status
+aiws github test
 ```
 
-The private key belongs at `~/ai-workstation-cli/secrets/github-app.pem` (mode `600`). A healthy test reports:
+The private key belongs at `~/aiws-cli/secrets/github-app.pem` (mode `600`). A healthy test reports:
 
 ```text
 GitHub authentication: READY ✓
@@ -466,66 +466,66 @@ GitHub authentication: READY ✓
 ### Start
 
 ```bash
-ai start
+aiws start
 ```
 
 ### Check
 
 ```bash
-ai status
+aiws status
 ```
 
 ### Start active project
 
 ```bash
-ai run
+aiws run
 ```
 
 ### Preview
 
 ```bash
-ai preview
+aiws preview
 ```
 
 ### Stop project
 
 ```bash
-ai app stop
+aiws app stop
 ```
 
 ### Stop workstation
 
 ```bash
-ai stop
+aiws stop
 ```
 
 ### Typical session
 
 ```bash
-ai doctor
-ai start
-ai run
-ai preview
+aiws doctor
+aiws start
+aiws run
+aiws preview
 
 # Work with DSH / editor / browser
 
-ai app logs
-ai status
+aiws app logs
+aiws status
 
-ai app stop
-ai stop
+aiws app stop
+aiws stop
 ```
 
 ---
 
 ## CLI Reference
 
-The command-line interface is maintained in [mosabbir-maruf/ai-workstation-cli](https://github.com/mosabbir-maruf/ai-workstation-cli).
+The command-line interface is maintained in [mosabbir-maruf/aiws-cli](https://github.com/mosabbir-maruf/aiws-cli).
 
 Run:
 
 ```bash
-ai
+aiws
 ```
 
 for the built-in command list.
@@ -533,115 +533,115 @@ for the built-in command list.
 ### Projects
 
 ```bash
-ai add <github-url>
-ai remove <project>
-ai list
-ai use <project>
+aiws add <github-url>
+aiws remove <project>
+aiws list
+aiws use <project>
 ```
 
-`ai add` clones a GitHub HTTPS repository into `~/projects/<name>`.
+`aiws add` clones a GitHub HTTPS repository into `~/projects/<name>`.
 
-`ai use` selects which project is mounted at `/workspace`.
+`aiws use` selects which project is mounted at `/workspace`.
 
 ### Git
 
 ```bash
-ai pull
-ai push "commit message"
+aiws pull
+aiws push "commit message"
 ```
 
-`ai pull` uses fast-forward-only Git behavior.
+`aiws pull` uses fast-forward-only Git behavior.
 
-`ai push` checks staged filenames for common sensitive-file patterns before committing/pushing.
+`aiws push` checks staged filenames for common sensitive-file patterns before committing/pushing.
 
 ### Workstation
 
 ```bash
-ai start
-ai stop
-ai restart
-ai status
-ai logs
-ai shell
-ai run
-ai preview
+aiws start
+aiws stop
+aiws restart
+aiws status
+aiws logs
+aiws shell
+aiws run
+aiws preview
 ```
 
 ### App
 
 ```bash
-ai app stop
-ai app restart
-ai app status
-ai app logs
+aiws app stop
+aiws app restart
+aiws app status
+aiws app logs
 ```
 
 ### Harness
 
 ```bash
-ai harness start
-ai harness stop
-ai harness restart
-ai harness status
+aiws harness start
+aiws harness stop
+aiws harness restart
+aiws harness status
 ```
 
 ### DSH
 
 ```bash
-ai dsh version
-ai dsh update
-ai dsh update <version>
+aiws dsh version
+aiws dsh update
+aiws dsh update <version>
 ```
 
 ### Maintenance
 
 ```bash
-ai cache
-ai cache clear
-ai cache clear --deps
-ai cache clear --deps --yes
-ai update
-ai upgrade
-ai doctor
+aiws cache
+aiws cache clear
+aiws cache clear --deps
+aiws cache clear --deps --yes
+aiws update
+aiws upgrade
+aiws doctor
 ```
 
 ### GitHub
 
 ```bash
-ai github setup
-ai github status
-ai github test
+aiws github setup
+aiws github status
+aiws github test
 ```
 
 ### Tunnel (anywhere access, optional)
 
 ```bash
-ai tunnel setup
-ai tunnel sync [port]
-ai tunnel status
-ai tunnel start
-ai tunnel stop
-ai tunnel logs
+aiws tunnel setup
+aiws tunnel sync [port]
+aiws tunnel status
+aiws tunnel start
+aiws tunnel stop
+aiws tunnel logs
 ```
 
 ### State
 
 ```bash
-ai state export
-ai state import <archive>
+aiws state export
+aiws state import <archive>
 ```
 
 ### Daemon (Web Dashboard API)
 
 ```bash
-ai daemon start
-ai daemon stop
-ai daemon restart
-ai daemon status
-ai daemon logs
+aiws daemon start
+aiws daemon stop
+aiws daemon restart
+aiws daemon status
+aiws daemon logs
 ```
 
-The daemon runs an asynchronous HTTP server on `127.0.0.1:8000` to serve the [AI Workstation Web Console](https://github.com/mosabbir-maruf/ai-workstation), providing full parity with the CLI and live Server-Sent Events (SSE) log streaming.
+The daemon runs an asynchronous HTTP server on `127.0.0.1:8000` to serve the [AIWS Web Console](https://github.com/mosabbir-maruf/aiws), providing full parity with the CLI and live Server-Sent Events (SSE) log streaming.
 
 ---
 
@@ -651,31 +651,31 @@ The daemon runs an asynchronous HTTP server on `127.0.0.1:8000` to serve the [AI
 GitHub repository
        │
        ▼
-ai add <github-url>
+aiws add <github-url>
        │
        ▼
 ~/projects/project-name
        │
        ▼
-ai use project-name
+aiws use project-name
        │
        ▼
 ACTIVE_PROJECT / ACTIVE_PROJECT_PATH
        │
        ▼
-ai start
+aiws start
        │
        ▼
 Docker workstation
        │
        ▼
-ai run
+aiws run
        │
        ▼
 Development server
        │
        ▼
-ai preview
+aiws preview
        │
        ▼
 Mac browser through SSH tunnel
@@ -740,7 +740,7 @@ The project development server may use another port, such as `5173`.
 Run:
 
 ```bash
-ai preview
+aiws preview
 ```
 
 Example:
@@ -773,27 +773,27 @@ Full guide (dashboard setup, route form, multi-app hostnames, troubleshooting): 
 Quick reference (on the VPS):
 
 ```bash
-ai tunnel setup
-ai tunnel status
-ai preview   # prints Anywhere URLs, flags any dashboard port edit
+aiws tunnel setup
+aiws tunnel status
+aiws preview   # prints Anywhere URLs, flags any dashboard port edit
 ```
 
 Result: `https://app.example.com` and `https://dsh.example.com`, each behind a Cloudflare Access policy.
 
 > [!IMPORTANT]
-> DSH's Settings pages (Models, Plugins) are loopback-only by upstream design: on any non-`localhost` address the browser client refuses to load them (`settings are unavailable in this browser`), and no server or tunnel setting changes that. Enter API keys **once** via the SSH address (`http://127.0.0.1:4090`, token from `ai preview`), then use the public URL for everything else (chat, sessions, workspaces). Details: [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md#dsh-settings-are-loopback-only).
+> DSH's Settings pages (Models, Plugins) are loopback-only by upstream design: on any non-`localhost` address the browser client refuses to load them (`settings are unavailable in this browser`), and no server or tunnel setting changes that. Enter API keys **once** via the SSH address (`http://127.0.0.1:4090`, token from `aiws preview`), then use the public URL for everything else (chat, sessions, workspaces). Details: [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md#dsh-settings-are-loopback-only).
 
 ### Bind address (automatic)
 
-`ai run` binds the dev server to `0.0.0.0` automatically so both SSH preview and the tunnel can reach it — no `package.json` edits needed:
+`aiws run` binds the dev server to `0.0.0.0` automatically so both SSH preview and the tunnel can reach it — no `package.json` edits needed:
 
 - Vite / Astro / SvelteKit / Nuxt / Angular: appends `--host 0.0.0.0`.
 - Next.js: appends `-H 0.0.0.0`.
 - Your own `--host` / `-H` / `0.0.0.0` in the `dev` script always wins (never overridden).
 - Backend apps (Express / Nest / Fastify / Hono / ...): no flag is injected. These bind all interfaces by default or respect the `HOST=0.0.0.0` environment the workstation already exports — just make sure the code does not hard-code `localhost` (use `process.env.HOST` when a host is specified).
-- Non-JS backends (Python / Go / ...) are not started by `ai run`: bind `0.0.0.0` manually (Flask `--host=0.0.0.0`, uvicorn `--host 0.0.0.0`, Django `runserver 0.0.0.0:8000` plus `ALLOWED_HOSTS`).
+- Non-JS backends (Python / Go / ...) are not started by `aiws run`: bind `0.0.0.0` manually (Flask `--host=0.0.0.0`, uvicorn `--host 0.0.0.0`, Django `runserver 0.0.0.0:8000` plus `ALLOWED_HOSTS`).
 
-`ai run` prints the active mode: `Bind: auto (--host 0.0.0.0)` or `Bind: project config`.
+`aiws run` prints the active mode: `Bind: auto (--host 0.0.0.0)` or `Bind: project config`.
 
 ---
 
@@ -804,17 +804,17 @@ GitHub is the source of truth for project source.
 Typical workflow:
 
 ```bash
-ai use my-project
-ai start
-ai run
+aiws use my-project
+aiws start
+aiws run
 
 # develop
 
-ai pull
-ai push "feat: implement feature"
+aiws pull
+aiws push "feat: implement feature"
 
-ai app stop
-ai stop
+aiws app stop
+aiws stop
 ```
 
 The workstation does not require a PAT or host SSH private key mounted into the container.
@@ -826,7 +826,7 @@ The workstation does not require a PAT or host SSH private key mounted into the 
 ### Inspect
 
 ```bash
-ai cache
+aiws cache
 ```
 
 This is read-only.
@@ -834,7 +834,7 @@ This is read-only.
 ### Safe cleanup
 
 ```bash
-ai cache clear
+aiws cache clear
 ```
 
 Cleans reclaimable Docker builder cache and npm cache when the workstation is running.
@@ -852,7 +852,7 @@ It does not intentionally remove:
 ### Dependency cleanup
 
 ```bash
-ai cache clear --deps
+aiws cache clear --deps
 ```
 
 Removes `node_modules` directories under `~/projects` after confirmation.
@@ -860,15 +860,15 @@ Removes `node_modules` directories under `~/projects` after confirmation.
 Non-interactive:
 
 ```bash
-ai cache clear --deps --yes
+aiws cache clear --deps --yes
 ```
 
 Recommended:
 
 ```bash
-ai app stop
-ai cache clear --deps
-ai run
+aiws app stop
+aiws cache clear --deps
+aiws run
 ```
 
 Dependencies are reinstalled from the project's lockfile.
@@ -882,7 +882,7 @@ Project source is protected by GitHub. DSH state is separate and should be backe
 ### Export
 
 ```bash
-ai state export
+aiws state export
 ```
 
 Store state archives somewhere protected and preferably off-host.
@@ -890,7 +890,7 @@ Store state archives somewhere protected and preferably off-host.
 ### Import
 
 ```bash
-ai state import <archive>
+aiws state import <archive>
 ```
 
 Only import trusted archives.
@@ -898,10 +898,10 @@ Only import trusted archives.
 Recommended recovery flow:
 
 ```bash
-ai stop
-ai state import /path/to/backup.tar.gz
-ai start
-ai dsh version
+aiws stop
+aiws state import /path/to/backup.tar.gz
+aiws start
+aiws dsh version
 ```
 
 ### Backup recommendation
@@ -919,7 +919,7 @@ There are three separate update layers.
 ### CLI/repository
 
 ```bash
-ai update
+aiws update
 ```
 
 or:
@@ -931,7 +931,7 @@ or:
 ### Workstation image
 
 ```bash
-ai upgrade
+aiws upgrade
 ```
 
 The image is consumed from GHCR.
@@ -939,16 +939,16 @@ The image is consumed from GHCR.
 ### DSH only
 
 ```bash
-ai dsh update
+aiws dsh update
 ```
 
 Recommended DSH upgrade:
 
 ```bash
-ai state export
-ai dsh update
-ai harness restart
-ai dsh version
+aiws state export
+aiws dsh update
+aiws harness restart
+aiws dsh version
 ```
 
 DSH updates do not require rebuilding the base image because the installation lives in persistent `runtime/npm-global`.
@@ -979,8 +979,8 @@ Push to main
 Published references:
 
 ```text
-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest
-ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
+ghcr.io/mosabbir-maruf/aiws-cli:latest
+ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>
 ```
 
 ### Why SHA tags?
@@ -990,7 +990,7 @@ ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
 For controlled deployments:
 
 ```dotenv
-IMAGE=ghcr.io/mosabbir-maruf/ai-workstation-cli:<commit-sha>
+IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>
 ```
 
 is preferable to relying only on `latest`.
@@ -1002,31 +1002,31 @@ is preferable to relying only on `latest`.
 ### Start of day
 
 ```bash
-ai doctor
-ai start
-ai status
-ai run
-ai preview
+aiws doctor
+aiws start
+aiws status
+aiws run
+aiws preview
 ```
 
 ### During development
 
 ```bash
-ai status
-ai app logs
-ai harness status
-ai shell
+aiws status
+aiws app logs
+aiws harness status
+aiws shell
 ```
 
 ### Switch project
 
 ```bash
-ai use another-project
-ai run
-ai preview
+aiws use another-project
+aiws run
+aiws preview
 ```
 
-With a tunnel configured, `ai preview` also prints the Anywhere URLs and flags any dashboard port edit. No extra command.
+With a tunnel configured, `aiws preview` also prints the Anywhere URLs and flags any dashboard port edit. No extra command.
 
 ### First-time anywhere access (one time)
 
@@ -1044,20 +1044,20 @@ Zero Trust -> Access -> policy for both hostnames
 VPS (connector install = Debian 64-bit on amd64 VPS, arm64-bit on ARM VPS):
 
 ```bash
-ai tunnel setup
-ai tunnel status
+aiws tunnel setup
+aiws tunnel status
 ```
 
 Verify:
 
 ```bash
-ai run
-ai preview
+aiws run
+aiws preview
 ```
 
 Open `https://app.example.com` and `https://dsh.example.com` from anywhere.
 
-First API key entry (one time): DSH Settings pages only load on loopback, so enter keys via SSH once — Mac terminal `ssh -N -L 4090:<container-ip>:4091 <vps>` (IP from `ai preview`), then `http://127.0.0.1:4090` (+ token from `ai preview`) → Settings → Models → Apply. Daily use stays on the public URLs.
+First API key entry (one time): DSH Settings pages only load on loopback, so enter keys via SSH once — Mac terminal `ssh -N -L 4090:<container-ip>:4091 <vps>` (IP from `aiws preview`), then `http://127.0.0.1:4090` (+ token from `aiws preview`) → Settings → Models → Apply. Daily use stays on the public URLs.
 
 ### New project with anywhere access (one time per project)
 
@@ -1070,32 +1070,32 @@ Dashboard: add one public hostname for the project:
 VPS: nothing tunnel-related to run. Daily switching stays:
 
 ```bash
-ai use <project>
-ai run
-ai preview
+aiws use <project>
+aiws run
+aiws preview
 ```
 
 ### End of day
 
 ```bash
-ai app stop
-ai stop
+aiws app stop
+aiws stop
 ```
 
 ### Before DSH upgrade
 
 ```bash
-ai state export
-ai dsh update
-ai harness restart
-ai dsh version
+aiws state export
+aiws dsh update
+aiws harness restart
+aiws dsh version
 ```
 
 ### Before major workstation changes
 
 ```bash
-ai state export
-ai doctor
+aiws state export
+aiws doctor
 ```
 
 ---
@@ -1105,71 +1105,71 @@ ai doctor
 ### Workstation is stopped
 
 ```bash
-ai start
+aiws start
 ```
 
 Then:
 
 ```bash
-ai status
+aiws status
 ```
 
 ### DSH/Harness is stopped
 
 ```bash
-ai harness status
-ai harness restart
+aiws harness status
+aiws harness restart
 ```
 
 If the workstation itself is stopped:
 
 ```bash
-ai start
+aiws start
 ```
 
 ### App fails to start
 
 ```bash
-ai app status
-ai app logs
+aiws app status
+aiws app logs
 ```
 
 If dependencies need a clean reinstall:
 
 ```bash
-ai app stop
-ai cache clear --deps
-ai run
+aiws app stop
+aiws cache clear --deps
+aiws run
 ```
 
 ### GitHub authentication fails
 
 ```bash
-ai github status
-ai github test
+aiws github status
+aiws github test
 ```
 
 Check the broker and GitHub App configuration.
 
 Do not copy a PAT or host SSH private key into the workstation as a workaround.
 
-If `ai github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing. Fix: [docs/github-app-setup.md](docs/github-app-setup.md#troubleshooting).
+If `aiws github test` fails with `Algorithm 'RS256' could not be found`, the Python `cryptography` backend is missing. Fix: [docs/github-app-setup.md](docs/github-app-setup.md#troubleshooting).
 
 ### Tunnel fails or serves the wrong port
 
 ```bash
-ai tunnel status
+aiws tunnel status
 sudo journalctl -u cloudflared -n 50
-ai preview
+aiws preview
 ```
 
-Common causes: public hostname missing in the dashboard tunnel, wrong app port after switching projects (`ai preview` prints the exact dashboard edit), connector token revoked (re-run `ai tunnel setup`), dev server blocking the public hostname (allow it in Vite/Next.js), or a missing Cloudflare Access policy.
+Common causes: public hostname missing in the dashboard tunnel, wrong app port after switching projects (`aiws preview` prints the exact dashboard edit), connector token revoked (re-run `aiws tunnel setup`), dev server blocking the public hostname (allow it in Vite/Next.js), or a missing Cloudflare Access policy.
 
 ### Preview fails
 
 ```bash
-ai status
-ai preview
+aiws status
+aiws preview
 ```
 
 Run the generated SSH command from the client machine and verify that the app is listening on the detected port.
@@ -1177,8 +1177,8 @@ Run the generated SSH command from the client machine and verify that the app is
 ### Image problems
 
 ```bash
-docker image ls ghcr.io/mosabbir-maruf/ai-workstation-cli
-ai doctor
+docker image ls ghcr.io/mosabbir-maruf/aiws-cli
+aiws doctor
 ```
 
 For deterministic deployments, use a SHA-tagged image.
@@ -1215,7 +1215,7 @@ For deterministic deployments, use a SHA-tagged image.
 Run:
 
 ```bash
-ai doctor
+aiws doctor
 ```
 
 regularly.
@@ -1262,66 +1262,66 @@ The production VPS consumes a prebuilt amd64/arm64 image instead of compiling th
 
 ```text
 PROJECTS
-  ai add <github-url>
-  ai remove <project>
-  ai list
-  ai use <project>
+  aiws add <github-url>
+  aiws remove <project>
+  aiws list
+  aiws use <project>
 
 GIT
-  ai pull
-  ai push "commit message"
+  aiws pull
+  aiws push "commit message"
 
 WORKSTATION
-  ai start
-  ai stop
-  ai restart
-  ai status
-  ai logs
-  ai shell
-  ai run
-  ai preview
+  aiws start
+  aiws stop
+  aiws restart
+  aiws status
+  aiws logs
+  aiws shell
+  aiws run
+  aiws preview
 
 APP
-  ai app stop
-  ai app restart
-  ai app status
-  ai app logs
+  aiws app stop
+  aiws app restart
+  aiws app status
+  aiws app logs
 
 HARNESS
-  ai harness start
-  ai harness stop
-  ai harness restart
-  ai harness status
+  aiws harness start
+  aiws harness stop
+  aiws harness restart
+  aiws harness status
 
 DSH
-  ai dsh update [version]
-  ai dsh version
+  aiws dsh update [version]
+  aiws dsh version
 
 MAINTENANCE
-  ai cache
-  ai cache clear
-  ai cache clear --deps
-  ai cache clear --deps --yes
-  ai update
-  ai upgrade
-  ai doctor
+  aiws cache
+  aiws cache clear
+  aiws cache clear --deps
+  aiws cache clear --deps --yes
+  aiws update
+  aiws upgrade
+  aiws doctor
 
 GITHUB
-  ai github setup
-  ai github status
-  ai github test
+  aiws github setup
+  aiws github status
+  aiws github test
 
 TUNNEL
-  ai tunnel setup
-  ai tunnel sync [port]
-  ai tunnel status
-  ai tunnel start
-  ai tunnel stop
-  ai tunnel logs
+  aiws tunnel setup
+  aiws tunnel sync [port]
+  aiws tunnel status
+  aiws tunnel start
+  aiws tunnel stop
+  aiws tunnel logs
 
 STATE
-  ai state export
-  ai state import <archive>
+  aiws state export
+  aiws state import <archive>
 ```
 
 ## Contributing
@@ -1332,13 +1332,13 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for de
 
 ## Security
 
-Security is foundational to AI Workstation. To report a security vulnerability or learn more about our container isolation boundaries, credential helper architecture, and defense-in-depth model, please consult [SECURITY.md](SECURITY.md).
+Security is foundational to AIWS. To report a security vulnerability or learn more about our container isolation boundaries, credential helper architecture, and defense-in-depth model, please consult [SECURITY.md](SECURITY.md).
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](https://github.com/mosabbir-maruf/ai-workstation-cli/blob/main/LICENSE) for the full license text.
+This project is licensed under the MIT License. See [LICENSE](https://github.com/mosabbir-maruf/aiws-cli/blob/main/LICENSE) for the full license text.
 
 ---
 

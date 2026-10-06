@@ -5,9 +5,9 @@
 set -euo pipefail
 
 docker ps --format '{{.Names}}' 2>/dev/null |
-    grep -qx ai-workstation-cli || exit 0
+    grep -qx aiws-cli || exit 0
 
-docker exec ai-workstation-cli node -e '
+docker exec aiws-cli node -e '
     const fs = require("fs");
 
     const files = ["/proc/net/tcp", "/proc/net/tcp6"];

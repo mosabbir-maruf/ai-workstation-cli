@@ -1,8 +1,8 @@
-# Contributing to AI Workstation
+# Contributing to AIWS
 
-Thank you for your interest in contributing to **AI Workstation**.
+Thank you for your interest in contributing to **AIWS**.
 
-AI Workstation is a reusable, isolated AI coding workstation designed for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS. The project combines host-level process orchestration, container isolation, and a brokered GitHub App credential architecture.
+AIWS is a reusable, isolated AI coding workstation designed for running DeepSeek Harness (DSH) and project development workloads on a remote Linux VPS. The project combines host-level process orchestration, container isolation, and a brokered GitHub App credential architecture.
 
 We welcome contributions that improve stability, security, documentation, and operator ergonomics while preserving the project's core isolation boundaries.
 
@@ -35,9 +35,9 @@ We welcome contributions that improve stability, security, documentation, and op
 
 ## 1. Before You Start
 
-Before making changes, familiarize yourself with the four foundational boundaries of AI Workstation:
+Before making changes, familiarize yourself with the four foundational boundaries of AIWS:
 
-1. **Host Management Layer**: The `ai` CLI (`scripts/ai`), Python virtual environment, project checkouts under `~/projects/`, and host runtime files (`runtime/`, `secrets/`, `.env`).
+1. **Host Management Layer**: The `aiws` CLI (`scripts/aiws`), Python virtual environment, project checkouts under `~/projects/`, and host runtime files (`runtime/`, `secrets/`, `.env`).
 2. **Workstation Container**: An isolated, unprivileged Docker container running as non-root `sandbox` (UID `1001`) with all Linux capabilities dropped, strict resource limits (512 MB RAM, 1.5 CPUs, 256 PIDs), and only the active project mounted at `/workspace`.
 3. **GitHub Broker**: A host-side daemon (`broker/github_broker.py`) communicating over a dedicated Unix domain socket (`runtime/github-broker/github.sock`) that mints short-lived GitHub App tokens on demand, completely eliminating the need to mount SSH private keys or Personal Access Tokens (PATs) inside the container.
 4. **Network and Preview Boundary**: Development ports are bound to `127.0.0.1` on the host and accessed via SSH port-forwarding rather than exposed publicly.
@@ -50,7 +50,7 @@ Any proposed change that weakens these isolation boundaries will be rejected.
 
 ### Prerequisites
 
-To develop and test AI Workstation locally or on a remote test server, ensure you have:
+To develop and test AIWS locally or on a remote test server, ensure you have:
 
 - **Operating System**: Linux (Ubuntu 22.04/24.04 recommended) or macOS for local scripting and review. Full end-to-end container testing requires Linux (specifically Linux ARM64 for published images, or local Docker build capability).
 - **Docker Engine**: Docker 24.0+ with Docker Compose support (`docker compose` v2).
@@ -70,7 +70,7 @@ To develop and test AI Workstation locally or on a remote test server, ensure yo
 ## 3. Repository Structure
 
 ```text
-ai-workstation-cli/
+aiws-cli/
 ├── .env.example                     # Environment template
 ├── .gitignore                       # Ignored secrets, runtime, and OS files
 ├── CONTRIBUTING.md                  # Contributor guidelines (this file)
@@ -104,7 +104,7 @@ ai-workstation-cli/
 │   └── github-app-credential-helper # In-container Git credential helper
 │
 └── scripts/
-    ├── ai                           # Main operator CLI
+    ├── aiws                           # Main operator CLI
     ├── github-app-credential-helper # Host-side Git credential helper
     └── lib/
         └── github.sh                # GitHub App setup and management library
@@ -119,7 +119,7 @@ The following paths are created on the host during installation and runtime. The
 - `secrets/`: Host-only secrets, specifically `secrets/github-app.pem` (permissions `600`).
 - `runtime/dsh/`: Persistent DeepSeek Harness settings and history (permissions `700`).
 - `runtime/npm-global/`: Persistent npm modules including DSH installation (permissions `700`).
-- `runtime/app/`: Ephemeral PID files and application logs for `ai run`.
+- `runtime/app/`: Ephemeral PID files and application logs for `aiws run`.
 - `runtime/harness/`: Ephemeral PID files and logs for DSH and the bridge.
 - `runtime/github-broker/`: Unix domain socket `github.sock` (permissions `770`, group `ai-broker`).
 - `~/projects/`: Host Git checkouts of managed projects.
@@ -130,8 +130,8 @@ The following paths are created on the host during installation and runtime. The
 
 1. **Fork and Clone**:
    ```bash
-   git clone https://github.com/<your-username>/ai-workstation-cli.git
-   cd ai-workstation-cli
+   git clone https://github.com/<your-username>/aiws-cli.git
+   cd aiws-cli
    ```
 
 2. **Create a Feature Branch**:
@@ -152,7 +152,7 @@ The following paths are created on the host during installation and runtime. The
 
 6. **Commit with Conventional Messages**:
    ```bash
-   git commit -m "feat(cli): add diagnostic flag to ai doctor"
+   git commit -m "feat(cli): add diagnostic flag to aiws doctor"
    ```
 
 7. **Push and Open a Pull Request**:
@@ -200,7 +200,7 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 ### Examples
 
-- `feat(cli): add json output option to ai list`
+- `feat(cli): add json output option to aiws list`
 - `fix(broker): handle socket reconnection on timeout`
 - `docs(readme): clarify ssh preview port forward examples`
 - `chore(deps): bump PyJWT to latest patch version`
@@ -218,7 +218,7 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 ## 8. Shell Scripting Guidelines
 
-All shell scripts (`scripts/ai`, `install.sh`, `update.sh`, `docker/*.sh`, `scripts/lib/*`) must adhere to:
+All shell scripts (`scripts/aiws`, `install.sh`, `update.sh`, `docker/*.sh`, `scripts/lib/*`) must adhere to:
 
 1. **Strict Mode**: Begin every bash script with:
    ```bash
@@ -271,15 +271,15 @@ All shell scripts (`scripts/ai`, `install.sh`, `update.sh`, `docker/*.sh`, `scri
    - Container `/workspace` mounts the active project only (`ACTIVE_PROJECT_PATH`).
    - Host `runtime/dsh` mounts to `/home/sandbox/.dsh`.
    - Host `runtime/npm-global` mounts to `/home/sandbox/.npm-global`.
-    - Host `runtime/app` mounts to `/run/ai-workstation-cli/app`.
-    - Host `runtime/harness` mounts to `/run/ai-workstation-cli/harness`.
+    - Host `runtime/app` mounts to `/run/aiws-cli/app`.
+    - Host `runtime/harness` mounts to `/run/aiws-cli/harness`.
    - Host `runtime/github-broker` mounts to `/run/ai-github-broker`.
 
 ---
 
 ## 11. Testing and Validation
 
-AI Workstation uses pragmatic shell and integration checks rather than heavy testing frameworks. Contributors must test their changes against the relevant subsystem:
+AIWS uses pragmatic shell and integration checks rather than heavy testing frameworks. Contributors must test their changes against the relevant subsystem:
 
 ### 1. Static and Syntax Checks
 
@@ -287,7 +287,7 @@ Always run syntax verification before submitting a PR:
 
 ```bash
 # Validate all bash scripts
-bash -n install.sh update.sh scripts/ai scripts/lib/github.sh docker/*.sh docker/github-app-credential-helper
+bash -n install.sh update.sh scripts/aiws scripts/lib/github.sh docker/*.sh docker/github-app-credential-helper
 
 # Validate Python scripts
 python3 -m py_compile broker/github_broker.py scripts/github-app-credential-helper
@@ -299,31 +299,31 @@ docker compose -f docker/compose.yml config
 git diff --check
 ```
 
-### 2. CLI Validation (`scripts/ai`)
+### 2. CLI Validation (`scripts/aiws`)
 
-If you modified `scripts/ai`:
+If you modified `scripts/aiws`:
 - Verify command dispatch and help outputs:
   ```bash
-  ai help
-  ai list
-  ai status
-  ai doctor
+  aiws help
+  aiws list
+  aiws status
+  aiws doctor
   ```
-- Test project switching (`ai use <project>`) and ensure the `/workspace` mount updates correctly.
-- Test cache inspection (`ai cache`) and dry-run/safe cache cleanup (`ai cache clear`).
+- Test project switching (`aiws use <project>`) and ensure the `/workspace` mount updates correctly.
+- Test cache inspection (`aiws cache`) and dry-run/safe cache cleanup (`aiws cache clear`).
 
 ### 3. Docker Runtime Validation (`docker/*`)
 
 If you modified `docker/Dockerfile` or `docker/compose.yml`:
 - Validate image build:
   ```bash
-  docker build -f docker/Dockerfile -t ai-workstation-cli:test .
+  docker build -f docker/Dockerfile -t aiws-cli:test .
   ```
 - Verify container startup and permissions:
   ```bash
-  ai start
-  ai status
-  ai shell
+  aiws start
+  aiws status
+  aiws shell
   # Inside container:
   id -u           # Must be 1001 (sandbox)
   dsh --version   # Must output version
@@ -334,13 +334,13 @@ If you modified `docker/Dockerfile` or `docker/compose.yml`:
 If you modified `docker/harness.sh` or DSH lifecycle routines:
 - Verify Harness start, status, and stop:
   ```bash
-  ai harness status
-  ai harness restart
-  ai harness status
+  aiws harness status
+  aiws harness restart
+  aiws harness status
   ```
 - Check DSH version output:
   ```bash
-  ai dsh version
+  aiws dsh version
   ```
 
 ### 5. GitHub Broker and Credential Flow
@@ -348,10 +348,10 @@ If you modified `docker/harness.sh` or DSH lifecycle routines:
 If you modified `broker/github_broker.py`, `scripts/lib/github.sh`, or credential helpers:
 - Verify broker status and connectivity:
   ```bash
-  ai github status
-  ai github test
+  aiws github status
+  aiws github test
   ```
-- Verify in-container credential helper execution by testing a Git operation (e.g., `git ls-remote` or `ai pull`).
+- Verify in-container credential helper execution by testing a Git operation (e.g., `git ls-remote` or `aiws pull`).
 - Verify Unix socket permissions (`0660` or `0770` with group `ai-broker`).
 
 ### 6. State Import and Export
@@ -359,15 +359,15 @@ If you modified `broker/github_broker.py`, `scripts/lib/github.sh`, or credentia
 If you modified `cmd_state_export` or `cmd_state_import`:
 - Run an export:
   ```bash
-  ai state export
+  aiws state export
   ```
 - Verify the exported archive structure and permissions:
   ```bash
-  tar -ztvf ~/ai-state-backups/ai-state-*.tar.gz
+  tar -ztvf ~/aiws-state-backups/aiws-state-*.tar.gz
   ```
 - Verify archive security validation by testing import against a valid export:
   ```bash
-  ai state import ~/ai-state-backups/ai-state-*.tar.gz
+  aiws state import ~/aiws-state-backups/aiws-state-*.tar.gz
   ```
 
 ### 7. App Runner and Preview
@@ -375,18 +375,18 @@ If you modified `cmd_state_export` or `cmd_state_import`:
 If you modified `docker/app-runner.sh`, `cmd_run`, or `cmd_preview`:
 - Start the application in an active project:
   ```bash
-  ai run
-  ai app status
-  ai app logs
+  aiws run
+  aiws app status
+  aiws app logs
   ```
 - Verify port detection and SSH tunnel string generation:
   ```bash
-  ai preview
+  aiws preview
   ```
 - Stop the application and verify process cleanup:
   ```bash
-  ai app stop
-  ai app status
+  aiws app stop
+  aiws app status
   ```
 
 ---
@@ -399,7 +399,7 @@ Changes touching the following areas are classified as **Security-Sensitive**:
 - Volume mount additions or modifications.
 - GitHub App authentication, JWT minting, or broker socket communication (`broker/github_broker.py`, `scripts/lib/github.sh`).
 - State archive import validation logic (`cmd_state_import`).
-- Pre-commit sensitive file detection in `ai push`.
+- Pre-commit sensitive file detection in `aiws push`.
 - User permissions, group memberships, or file mode settings (`chmod`, `chown`).
 
 ### Additional Requirements for Security Changes:
@@ -448,8 +448,8 @@ A good PR description contains:
 
 ## 16. Documentation Requirements
 
-- Any new CLI subcommands or options added to `scripts/ai` must be documented in:
-  - The CLI `usage()` function in `scripts/ai`.
+- Any new CLI subcommands or options added to `scripts/aiws` must be documented in:
+  - The CLI `usage()` function in `scripts/aiws`.
   - The CLI Reference section in `README.md`.
   - The Quick Reference table in `README.md`.
 - Ensure Markdown formatting follows standard GitHub Flavored Markdown (GFM).
@@ -459,15 +459,15 @@ A good PR description contains:
 
 ## 17. Bug Reporting
 
-If you encounter a bug, submit an issue using our [Bug Report Form](https://github.com/mosabbir-maruf/ai-workstation-cli/issues/new?template=bug_report.yml).
+If you encounter a bug, submit an issue using our [Bug Report Form](https://github.com/mosabbir-maruf/aiws-cli/issues/new?template=bug_report.yml).
 
 Provide:
 - A clear description of the problem.
 - Your environment details (Host OS, Docker version, architecture).
 - Workstation version or Git commit SHA.
-- The exact `ai` command executed.
+- The exact `aiws` command executed.
 - Sanitized reproduction steps.
-- Sanitized `ai doctor` output.
+- Sanitized `aiws doctor` output.
 
 > [!CAUTION]
 > **Never include secrets in bug reports**: Redact private keys, tokens, `.env` entries, passwords, or internal server IPs before submitting.
@@ -476,7 +476,7 @@ Provide:
 
 ## 18. Feature Requests
 
-To suggest a new feature or improvement, open an issue using our [Feature Request Form](https://github.com/mosabbir-maruf/ai-workstation-cli/issues/new?template=feature_request.yml).
+To suggest a new feature or improvement, open an issue using our [Feature Request Form](https://github.com/mosabbir-maruf/aiws-cli/issues/new?template=feature_request.yml).
 
 Good feature proposals:
 - Solve a real operational problem for remote AI development.
@@ -504,7 +504,7 @@ Before submitting your pull request, verify each item:
 - [ ] All Python scripts pass `python3 -m py_compile`.
 - [ ] Docker Compose config validates (`docker compose -f docker/compose.yml config`).
 - [ ] `git diff --check` passes with no whitespace errors.
-- [ ] `ai doctor` passes if testing on a live workstation environment.
+- [ ] `aiws doctor` passes if testing on a live workstation environment.
 - [ ] No secrets, private keys, `.env` files, or runtime state are committed.
 - [ ] Documentation in `README.md` has been updated where appropriate.
 - [ ] Any breaking changes or operational requirements are documented.

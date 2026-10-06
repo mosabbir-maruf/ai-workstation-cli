@@ -10,7 +10,7 @@ DSH_PORT="4090"
 BRIDGE_HOST="0.0.0.0"
 BRIDGE_PORT="4091"
 
-RUNTIME_DIR="/run/ai-workstation-cli/harness"
+RUNTIME_DIR="/run/aiws-cli/harness"
 DSH_PID_FILE="$RUNTIME_DIR/dsh.pid"
 BRIDGE_PID_FILE="$RUNTIME_DIR/bridge.pid"
 LOG_FILE="$RUNTIME_DIR/harness.log"
@@ -342,8 +342,8 @@ start_bridge() {
         setInterval(() => {
             const probe = net.connect(4090, "127.0.0.1", () => probe.destroy());
             probe.on("error", () => {
-                try { fs.unlinkSync("/run/ai-workstation-cli/harness/dsh.pid"); } catch {}
-                try { fs.unlinkSync("/run/ai-workstation-cli/harness/bridge.pid"); } catch {}
+                try { fs.unlinkSync("/run/aiws-cli/harness/dsh.pid"); } catch {}
+                try { fs.unlinkSync("/run/aiws-cli/harness/bridge.pid"); } catch {}
                 process.exit(0);
             });
         }, 3000).unref();

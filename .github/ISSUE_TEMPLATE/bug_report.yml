@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report an issue or unexpected behavior in AI Workstation
+description: Report an issue or unexpected behavior in AIWS
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -20,7 +20,7 @@ body:
         > - Contents of `.env` files
         > - Sensitive host network information or internal IPs
         >
-        > For security vulnerabilities, please refer to our [Security Policy](https://github.com/mosabbir-maruf/ai-workstation-cli/blob/main/SECURITY.md).
+        > For security vulnerabilities, please refer to our [Security Policy](https://github.com/mosabbir-maruf/aiws-cli/blob/main/SECURITY.md).
 
   - type: textarea
     id: summary
@@ -35,14 +35,14 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of AI Workstation is affected?
+      description: Which part of AIWS is affected?
       options:
-        - CLI (`scripts/ai`)
+        - CLI (`scripts/aiws`)
         - Workstation Container (`docker/*`)
         - DeepSeek Harness / DSH
         - GitHub Broker (`broker/*`)
-        - App Runner / Preview (`ai run`, `ai preview`)
-        - State Import / Export (`ai state`)
+        - App Runner / Preview (`aiws run`, `aiws preview`)
+        - State Import / Export (`aiws state`)
         - Installer / Updater (`install.sh`, `update.sh`)
         - Documentation
         - Other
@@ -76,8 +76,8 @@ body:
     id: command
     attributes:
       label: Relevant Command
-      description: What was the exact `ai` command or script executed?
-      placeholder: e.g., ai start, ai run, ai preview, ai state import ...
+      description: What was the exact `aiws` command or script executed?
+      placeholder: e.g., aiws start, aiws run, aiws preview, aiws state import ...
     validations:
       required: true
 
@@ -87,9 +87,9 @@ body:
       label: Steps to Reproduce
       description: Describe step-by-step how to reproduce the problem.
       placeholder: |
-        1. Run 'ai use my-project'
-        2. Run 'ai start'
-        3. Run 'ai run'
+        1. Run 'aiws use my-project'
+        2. Run 'aiws start'
+        3. Run 'aiws run'
         4. See error ...
     validations:
       required: true
@@ -115,16 +115,16 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: "Diagnostic Output (`ai doctor`)"
-      description: Output of `ai doctor` (sanitized of sensitive info).
+      label: "Diagnostic Output (`aiws doctor`)"
+      description: Output of `aiws doctor` (sanitized of sensitive info).
       render: text
-      placeholder: Paste sanitized output of `ai doctor` here...
+      placeholder: Paste sanitized output of `aiws doctor` here...
 
   - type: textarea
     id: logs
     attributes:
       label: Relevant Logs
-      description: Relevant logs from `ai logs`, `ai app logs`, or systemd service (sanitized).
+      description: Relevant logs from `aiws logs`, `aiws app logs`, or systemd service (sanitized).
       render: text
       placeholder: Paste sanitized log output here...
 

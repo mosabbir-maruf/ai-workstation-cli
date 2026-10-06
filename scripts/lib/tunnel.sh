@@ -4,7 +4,7 @@
 # The tunnel itself is created in Cloudflare Zero Trust -> Networks ->
 # Tunnels (Cloudflared type). This script only installs the connector on
 # the VPS with the dashboard token and remembers the hostnames so
-# `ai preview` can print the public URLs and flag a stale app port.
+# `aiws preview` can print the public URLs and flag a stale app port.
 set -euo pipefail
 
 RESOLVED_SOURCE="${BASH_SOURCE[0]}"
@@ -18,7 +18,7 @@ while [ -L "$RESOLVED_SOURCE" ]; do
 done
 LIB_DIR="$(cd "$(dirname "$RESOLVED_SOURCE")" && pwd)"
 SCRIPT_ROOT="$(cd "$LIB_DIR/../.." && pwd)"
-ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+ROOT="${AIWS_ROOT:-$SCRIPT_ROOT}"
 if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
     ROOT="$SCRIPT_ROOT"
 fi
@@ -194,12 +194,12 @@ tunnel_sync() {
     local dsh_host="${CLOUDFLARED_DSH_HOSTNAME:-}"
 
     [[ -n "$app_host" && -n "$dsh_host" ]] ||
-        die "Tunnel is not configured. Run: ai tunnel setup"
+        die "Tunnel is not configured. Run: aiws tunnel setup"
 
     if [[ -z "$app_port" ]]; then
         app_port="$(detect_app_port || true)"
         [[ -n "$app_port" ]] ||
-            die "No app port detected. Usage: ai tunnel sync <port>"
+            die "No app port detected. Usage: aiws tunnel sync <port>"
         echo "Detected app port: $app_port"
     fi
 

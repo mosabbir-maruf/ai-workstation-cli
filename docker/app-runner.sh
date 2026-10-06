@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-APP_DIR="/run/ai-workstation-cli/app"
+APP_DIR="/run/aiws-cli/app"
 PID_FILE="$APP_DIR/pid"
 PGID_FILE="$APP_DIR/pgid"
 BRIDGE_PID_FILE="$APP_DIR/bridge.pid"

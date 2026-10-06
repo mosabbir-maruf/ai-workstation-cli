@@ -1,7 +1,7 @@
 services:
   workstation:
-    image: ${IMAGE:-ghcr.io/mosabbir-maruf/ai-workstation-cli:latest}
-    container_name: ai-workstation-cli
+    image: ${IMAGE:-ghcr.io/mosabbir-maruf/aiws-cli:latest}
+    container_name: aiws-cli
     restart: unless-stopped
 
     group_add:
@@ -21,13 +21,13 @@ services:
 
     volumes:
       - ${ACTIVE_PROJECT_PATH:-/tmp}:/workspace
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/npm-global:/home/sandbox/.npm-global
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/dsh:/home/sandbox/.dsh
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/app:/run/ai-workstation-cli/app
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/github-broker:/run/ai-github-broker
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/runtime/harness:/run/ai-workstation-cli/harness
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/docker/harness.sh:/usr/local/bin/harness.sh:ro
-      - ${AI_WORKSTATION_ROOT:-/home/mosabbir/ai-workstation-cli}/docker/app-runner.sh:/usr/local/bin/app-runner.sh:ro
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/npm-global:/home/sandbox/.npm-global
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/dsh:/home/sandbox/.dsh
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/app:/run/aiws-cli/app
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/github-broker:/run/ai-github-broker
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/harness:/run/aiws-cli/harness
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/docker/harness.sh:/usr/local/bin/harness.sh:ro
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/docker/app-runner.sh:/usr/local/bin/app-runner.sh:ro
 
     ports:
       - "127.0.0.1:3000:3000"

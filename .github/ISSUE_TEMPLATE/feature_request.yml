@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## Propose an Enhancement to AI Workstation
+        ## Propose an Enhancement to AIWS
 
-        Thank you for helping make AI Workstation better!
+        Thank you for helping make AIWS better!
         Please describe your proposal clearly, keeping in mind the project's security and isolation principles.
 
   - type: textarea

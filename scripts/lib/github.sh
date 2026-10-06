@@ -11,7 +11,7 @@ while [ -L "$RESOLVED_SOURCE" ]; do
     fi
 done
 SCRIPT_ROOT="$(cd "$(dirname "$RESOLVED_SOURCE")/../.." && pwd)"
-ROOT="${AI_WORKSTATION_ROOT:-$SCRIPT_ROOT}"
+ROOT="${AIWS_ROOT:-$SCRIPT_ROOT}"
 if [[ ! -d "$ROOT" || ! -f "$ROOT/broker/github_broker.py" ]]; then
     ROOT="$SCRIPT_ROOT"
 fi
@@ -78,7 +78,7 @@ github_ensure_service() {
         set_env GITHUB_BROKER_GID "$broker_gid"
     fi
     set_env GITHUB_BROKER_SOCKET "$BROKER_SOCKET"
-    set_env AI_WORKSTATION_ROOT "$ROOT"
+    set_env AIWS_ROOT "$ROOT"
 
     if ! id -nG "$current_user" 2>/dev/null | grep -qw "ai-broker"; then
         run_elevated usermod -aG ai-broker "$current_user" 2>/dev/null || true
@@ -109,7 +109,7 @@ github_ensure_service() {
 
     if $write_service_cmd "$SERVICE_FILE" >/dev/null 2>&1 <<SERVICE
 [Unit]
-Description=AI Workstation GitHub App Credential Broker
+Description=AIWS GitHub App Credential Broker
 After=network-online.target
 Wants=network-online.target
 
@@ -120,7 +120,7 @@ Group=ai-broker
 
 WorkingDirectory=$ROOT
 
-Environment=AI_WORKSTATION_ROOT=$ROOT
+Environment=AIWS_ROOT=$ROOT
 
 ExecStart=$py_bin $BROKER_SCRIPT
 
@@ -326,7 +326,7 @@ github_setup() {
     echo "GitHub setup infrastructure completed."
     echo
     echo "Next:"
-    echo "  ai github test"
+    echo "  aiws github test"
     echo
 }
 

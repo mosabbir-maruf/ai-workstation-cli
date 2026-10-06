@@ -19,7 +19,7 @@ die() {
 }
 
 echo
-bash "$ROOT/scripts/ai" banner "AIWS CLI Installer · Host Daemon, Broker & Container Runtime"
+bash "$ROOT/scripts/aiws" banner "AIWS CLI Installer · Host Daemon, Broker & Container Runtime"
 echo
 
 # --------------------------------------------------
@@ -64,7 +64,7 @@ python3 -c 'import venv, ensurepip' >/dev/null 2>&1 ||
 # Sudoers & journal permissions for daemon & CLI
 # --------------------------------------------------
 echo "Configuring sudoers permissions..."
-SUDOERS_FILE="/etc/sudoers.d/ai-workstation"
+SUDOERS_FILE="/etc/sudoers.d/aiws"
 echo "$(id -un) ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" >/dev/null
 sudo chmod 0440 "$SUDOERS_FILE"
 sudo usermod -aG systemd-journal "$(id -un)" 2>/dev/null || true
@@ -163,18 +163,18 @@ echo "✓ PyJWT ready"
 # Install AI CLI & Daemon
 # --------------------------------------------------
 
-echo "Installing ai CLI..."
+echo "Installing aiws CLI..."
 
-sudo ln -sfn     "$ROOT/scripts/ai"     /usr/local/bin/ai
+sudo ln -sfn     "$ROOT/scripts/aiws"     /usr/local/bin/aiws
 
-sudo chmod 0755 "$ROOT/scripts/ai"
+sudo chmod 0755 "$ROOT/scripts/aiws"
 chmod 0755 "$ROOT/daemon/server.py"
 
-echo "✓ ai CLI installed"
+echo "✓ aiws CLI installed"
 
 # Configure Host Daemon Systemd Service
-DAEMON_SERVICE_FILE="/etc/systemd/system/ai-workstation-daemon.service"
-echo "Configuring AI Workstation daemon service..."
+DAEMON_SERVICE_FILE="/etc/systemd/system/aiws-daemon.service"
+echo "Configuring AIWS daemon service..."
 
 CURRENT_USER="${SUDO_USER:-$(id -un)}"
 if [[ "$CURRENT_USER" == "root" && -n "${SUDO_USER:-}" ]]; then
@@ -189,14 +189,14 @@ fi
 
 sudo tee "$DAEMON_SERVICE_FILE" >/dev/null <<SERVICE
 [Unit]
-Description=AI Workstation Host Control Daemon
+Description=AIWS Host Control Daemon
 After=network.target
 
 [Service]
 Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$ROOT
-Environment=AI_WORKSTATION_ROOT=$ROOT
+Environment=AIWS_ROOT=$ROOT
 ExecStart=/usr/bin/python3 $ROOT/daemon/server.py
 Restart=always
 RestartSec=3
@@ -210,8 +210,8 @@ WantedBy=multi-user.target
 SERVICE
 
 sudo systemctl daemon-reload 2>/dev/null || true
-sudo systemctl enable ai-workstation-daemon 2>/dev/null || true
-sudo systemctl restart ai-workstation-daemon 2>/dev/null || true
+sudo systemctl enable aiws-daemon 2>/dev/null || true
+sudo systemctl restart aiws-daemon 2>/dev/null || true
 
 echo "✓ Host daemon service configured"
 
@@ -227,8 +227,8 @@ echo "✓ GitHub broker service configured"
 echo
 echo "Running validation..."
 
-[[ -x /usr/local/bin/ai ]] ||
-    die "ai CLI installation failed."
+[[ -x /usr/local/bin/aiws ]] ||
+    die "aiws CLI installation failed."
 
 [[ -x "$ROOT/.venv/bin/python" ]] ||
     die "Python virtual environment is unavailable."
@@ -261,21 +261,18 @@ echo "╰───────────────────────�
 echo
 
 if [[ -t 0 && -t 1 && "${AIWS_SKIP_SETUP:-0}" != "1" ]]; then
-    read -r -p "Launch interactive AIWS CLI Setup Flow now? [Y/s (skip)] (default: Y): " _launch_setup || true
-    if [[ -z "${_launch_setup:-}" || "${_launch_setup}" =~ ^[Yy]$ ]]; then
-        exec "$ROOT/scripts/ai" setup
-    fi
+    exec "$ROOT/scripts/aiws" tui --setup
 fi
 
 echo "Skipped interactive setup flow. You can launch it anytime by running:"
 echo
-echo "  ai setup"
+echo "  aiws setup"
 echo
 echo "Or configure individual components manually:"
-echo "  1. ai doctor          # Verify host environment"
-echo "  2. ai github setup    # Configure GitHub App integration (optional)"
-echo "  3. ai tunnel setup    # Configure Cloudflare Tunnel (optional)"
-echo "  4. ai add <repo-url>  # Clone a project into ~/projects"
-echo "  5. ai use <project>   # Activate project"
-echo "  6. ai start           # Start container & DSH agent runtime"
+echo "  1. aiws doctor          # Verify host environment"
+echo "  2. aiws github setup    # Configure GitHub App integration (optional)"
+echo "  3. aiws tunnel setup    # Configure Cloudflare Tunnel (optional)"
+echo "  4. aiws add <repo-url>  # Clone a project into ~/projects"
+echo "  5. aiws use <project>   # Activate project"
+echo "  6. aiws start           # Start container & DSH agent runtime"
 echo

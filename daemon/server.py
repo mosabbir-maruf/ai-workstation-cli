@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AI Workstation Host Control Daemon
+AIWS Host Control Daemon
 High-performance, zero-dependency async HTTP bridge daemon that connects
-the AI Workstation Web Dashboard (bklit-ui) directly to the CLI and system state.
+the AIWS Web Dashboard (bklit-ui) directly to the CLI and system state.
 
 Runs natively with Python 3.8+ (asyncio + http.server / socketserver) on loopback.
 Port: 8000 (default)
@@ -28,7 +28,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 def _resolve_root() -> Path:
-    env_root = os.environ.get("AI_WORKSTATION_ROOT")
+    env_root = os.environ.get("AIWS_ROOT")
     if env_root:
         p = Path(env_root).resolve()
         if p.is_dir() and (p / "broker/github_broker.py").is_file():
@@ -50,7 +50,7 @@ HARNESS_LOG_FILE = HARNESS_RUNTIME_DIR / "harness.log"
 APP_LOG_FILE = APP_RUNTIME_DIR / "app.log"
 GITHUB_BROKER_SOCKET = RUNTIME_DIR / "github-broker" / "github.sock"
 GITHUB_PEM_FILE = ROOT / "secrets" / "github-app.pem"
-BACKUPS_DIR = Path.home() / "ai-state-backups"
+BACKUPS_DIR = Path.home() / "aiws-state-backups"
 
 DAEMON_HOST = os.environ.get("WORKSTATION_DAEMON_HOST", "127.0.0.1")
 DAEMON_PORT = int(os.environ.get("WORKSTATION_DAEMON_PORT", "8000"))
@@ -123,8 +123,8 @@ def get_configured_api_key() -> str:
 
 def _run_cmd_sync(cmd: list, timeout: float = 30.0, input_data: str = None) -> tuple:
     actual_cmd = list(cmd)
-    if actual_cmd and actual_cmd[0] == "ai":
-        script_path = ROOT / "scripts" / "ai"
+    if actual_cmd and actual_cmd[0] == "aiws":
+        script_path = ROOT / "scripts" / "aiws"
         if script_path.is_file():
             actual_cmd[0] = str(script_path)
 
@@ -189,7 +189,7 @@ def is_port_open(port: int, host: str = "127.0.0.1", timeout: float = 0.15) -> b
         return False
 
 
-def is_container_running(name: str = "ai-workstation-cli") -> bool:
+def is_container_running(name: str = "aiws-cli") -> bool:
     ok, out = _run_cmd_sync(["docker", "ps", "--format", "{{.Names}}"], timeout=4.0)
     if ok and out:
         return any(line.strip() == name for line in out.splitlines())
@@ -198,7 +198,7 @@ def is_container_running(name: str = "ai-workstation-cli") -> bool:
 
 def get_container_ip() -> str:
     ok, out = _run_cmd_sync(
-        ["docker", "inspect", "ai-workstation-cli", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"],
+        ["docker", "inspect", "aiws-cli", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"],
         timeout=3.0,
     )
     if ok and out:
@@ -232,7 +232,7 @@ def get_app_process_info(container_ok: bool = None) -> tuple[bool, str]:
             pid = APP_PID_FILE.read_text().strip()
             if pid.isdigit():
                 ok, _ = _run_cmd_sync(
-                    ["docker", "exec", "ai-workstation-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"],
+                    ["docker", "exec", "aiws-cli", "sh", "-c", f"kill -0 {pid} 2>/dev/null"],
                     timeout=1.5,
                 )
                 if ok:
@@ -251,7 +251,7 @@ def get_app_process_info(container_ok: bool = None) -> tuple[bool, str]:
             [
                 "docker",
                 "exec",
-                "ai-workstation-cli",
+                "aiws-cli",
                 "sh",
                 "-c",
                 (
@@ -762,9 +762,9 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             env = read_env()
             active_proj = env.get("ACTIVE_PROJECT", "")
 
-            # Output string matching CLI `ai status`
+            # Output string matching CLI `aiws status`
             summary = [
-                "=== AI Workstation ===",
+                "=== AIWS ===",
                 f"Active project: {active_proj or 'none'}",
                 f"Project path: {env.get('ACTIVE_PROJECT_PATH', 'none')}",
                 "",
@@ -780,34 +780,34 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         # 3. Workstation Container Lifecycle
         elif clean_path == "/api/workstation/start":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "start"], timeout=300.0)
+            ok, out = await run_cmd_async(["aiws", "start"], timeout=300.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/stop":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "stop"], timeout=60.0)
+            ok, out = await run_cmd_async(["aiws", "stop"], timeout=60.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/workstation/restart":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "restart"], timeout=300.0)
+            ok, out = await run_cmd_async(["aiws", "restart"], timeout=300.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
 
         # 4. App Lifecycle inside container
         elif clean_path == "/api/app/run":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "run"], timeout=180.0)
+            ok, out = await run_cmd_async(["aiws", "run"], timeout=180.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/stop":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "app", "stop"], timeout=30.0)
+            ok, out = await run_cmd_async(["aiws", "app", "stop"], timeout=30.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/restart":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "app", "restart"], timeout=180.0)
+            ok, out = await run_cmd_async(["aiws", "app", "restart"], timeout=180.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/app/status":
@@ -898,7 +898,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": False, "output": "Missing project name"}
             else:
                 invalidate_cache()
-                ok, out = await run_cmd_async(["ai", "use", name], timeout=45.0)
+                ok, out = await run_cmd_async(["aiws", "use", name], timeout=45.0)
                 invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/projects/add":
@@ -908,7 +908,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": False, "output": "Missing repository url"}
             else:
                 invalidate_cache()
-                ok, out = await run_cmd_async(["ai", "add", url], timeout=120.0)
+                ok, out = await run_cmd_async(["aiws", "add", url], timeout=120.0)
                 invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/projects/remove":
@@ -918,7 +918,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 resp_data = {"ok": False, "output": "Missing project name"}
             else:
                 invalidate_cache()
-                ok, out = await run_cmd_async(["ai", "remove", name], timeout=30.0)
+                ok, out = await run_cmd_async(["aiws", "remove", name], timeout=30.0)
                 invalidate_cache()
                 resp_data = {"ok": ok, "output": out}
 
@@ -1005,13 +1005,13 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     }
         elif clean_path == "/api/git/pull":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "pull"], timeout=60.0)
+            ok, out = await run_cmd_async(["aiws", "pull"], timeout=60.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/git/push":
             invalidate_cache()
-            msg = parsed_json.get("message", "Update from AI Workstation").strip()
-            ok, out = await run_cmd_async(["ai", "push", msg], timeout=60.0)
+            msg = parsed_json.get("message", "Update from AIWS").strip()
+            ok, out = await run_cmd_async(["aiws", "push", msg], timeout=60.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/git/exec":
@@ -1123,17 +1123,17 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         # 7. Harness & DSH
         elif clean_path == "/api/harness/start":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "harness", "start"], timeout=30.0)
+            ok, out = await run_cmd_async(["aiws", "harness", "start"], timeout=30.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/stop":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "harness", "stop"], timeout=15.0)
+            ok, out = await run_cmd_async(["aiws", "harness", "stop"], timeout=15.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/restart":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "harness", "restart"], timeout=30.0)
+            ok, out = await run_cmd_async(["aiws", "harness", "restart"], timeout=30.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/harness/status":
@@ -1146,12 +1146,12 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             ]
             resp_data = {"ok": True, "output": "\n".join(summary)}
         elif clean_path == "/api/dsh/version":
-            ok, out = await run_cmd_async(["ai", "dsh", "version"], timeout=5.0)
+            ok, out = await run_cmd_async(["aiws", "dsh", "version"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/dsh/update":
             invalidate_cache()
             ver = parsed_json.get("version", "").strip()
-            cmd = ["ai", "dsh", "update"]
+            cmd = ["aiws", "dsh", "update"]
             if ver:
                 cmd.append(ver)
             ok, out = await run_cmd_async(cmd, timeout=180.0)
@@ -1224,7 +1224,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             }
                         else:
                             ok_sync, out_sync = await run_cmd_async(
-                                ["ai", "harness", "sync"],
+                                ["aiws", "harness", "sync"],
                                 timeout=10.0,
                             )
                             if not ok_sync:
@@ -1238,7 +1238,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                                 }
                             else:
                                 ok_restart, out_restart = await run_cmd_async(
-                                    ["ai", "harness", "restart"],
+                                    ["aiws", "harness", "restart"],
                                     timeout=30.0,
                                 )
                                 if not ok_restart:
@@ -1314,18 +1314,18 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             resp_data = {"ok": True, "output": out}
         elif clean_path == "/api/tunnel/start":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "tunnel", "start"], timeout=15.0)
+            ok, out = await run_cmd_async(["aiws", "tunnel", "start"], timeout=15.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/tunnel/stop":
             invalidate_cache()
-            ok, out = await run_cmd_async(["ai", "tunnel", "stop"], timeout=15.0)
+            ok, out = await run_cmd_async(["aiws", "tunnel", "stop"], timeout=15.0)
             invalidate_cache()
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/tunnel/sync":
             invalidate_cache()
             port = parsed_json.get("port")
-            cmd = ["ai", "tunnel", "sync"]
+            cmd = ["aiws", "tunnel", "sync"]
             if port is not None:
                 cmd.append(str(port))
             ok, out = await run_cmd_async(cmd, timeout=15.0)
@@ -1368,10 +1368,10 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # 11. GitHub Integration
         elif clean_path == "/api/github/status":
-            ok, out = await run_cmd_async(["ai", "github", "status"], timeout=5.0)
+            ok, out = await run_cmd_async(["aiws", "github", "status"], timeout=5.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/test":
-            ok, out = await run_cmd_async(["ai", "github", "test"], timeout=15.0)
+            ok, out = await run_cmd_async(["aiws", "github", "test"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/github/setup":
             app_id = parsed_json.get("appId", "").strip()
@@ -1389,9 +1389,9 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 GITHUB_PEM_FILE.write_text(clean_pem)
                 GITHUB_PEM_FILE.chmod(0o600)
 
-                ok, out = await run_cmd_async(["ai", "github", "setup", app_id, inst_id, str(GITHUB_PEM_FILE)], timeout=15.0)
+                ok, out = await run_cmd_async(["aiws", "github", "setup", app_id, inst_id, str(GITHUB_PEM_FILE)], timeout=15.0)
                 if ok:
-                    ok_test, test_out = await run_cmd_async(["ai", "github", "test"], timeout=15.0)
+                    ok_test, test_out = await run_cmd_async(["aiws", "github", "test"], timeout=15.0)
                     invalidate_cache()
                     resp_data = {"ok": ok_test, "output": f"{out}\n\n{test_out}" if test_out else out}
                 else:
@@ -1412,7 +1412,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         status_code = 400
                         resp_data = {"ok": False, "output": "Workstation container is not running. Start it first."}
                     else:
-                        cmd = ["docker", "exec", "-i", "ai-workstation-cli", "sh", "-lc", command]
+                        cmd = ["docker", "exec", "-i", "aiws-cli", "sh", "-lc", command]
                         ok, out = await run_cmd_async(cmd, timeout=90.0)
                         resp_data = {"ok": ok, "output": out}
                 else:
@@ -1438,31 +1438,31 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                                 requires_sudo = True
                         resp_data = {"ok": ok, "output": out, "requiresSudo": requires_sudo}
         elif clean_path == "/api/cache":
-            ok, out = await run_cmd_async(["ai", "cache"], timeout=15.0)
+            ok, out = await run_cmd_async(["aiws", "cache"], timeout=15.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/cache/clear":
             deps = parsed_json.get("deps", False)
-            cmd = ["ai", "cache", "clear", "--yes"]
+            cmd = ["aiws", "cache", "clear", "--yes"]
             if deps:
                 cmd.append("--deps")
             ok, out = await run_cmd_async(cmd, timeout=60.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/doctor":
-            ok, out = await run_cmd_async(["ai", "doctor"], timeout=20.0)
+            ok, out = await run_cmd_async(["aiws", "doctor"], timeout=20.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/update":
-            ok, out = await run_cmd_async(["ai", "update"], timeout=120.0)
+            ok, out = await run_cmd_async(["aiws", "update"], timeout=120.0)
             resp_data = {"ok": ok, "output": out}
         elif clean_path == "/api/system/upgrade":
-            ok, out = await run_cmd_async(["ai", "upgrade"], timeout=180.0)
+            ok, out = await run_cmd_async(["aiws", "upgrade"], timeout=180.0)
             resp_data = {"ok": ok, "output": out}
 
         # 13. State Management
         elif clean_path == "/api/state/export":
-            ok, out = await run_cmd_async(["ai", "state", "export"], timeout=60.0)
+            ok, out = await run_cmd_async(["aiws", "state", "export"], timeout=60.0)
             filename = ""
             if ok:
-                match = re.search(r"(ai-state-\d+-\d+\.tar\.gz)", out)
+                match = re.search(r"(aiws-state-\d+-\d+\.tar\.gz)", out)
                 if match:
                     filename = match.group(1)
             resp_data = {
@@ -1476,7 +1476,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             if "?" in path:
                 query_file = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x).get("file", "")
             if not query_file:
-                backups = sorted(BACKUPS_DIR.glob("ai-state-*.tar.gz"), reverse=True)
+                backups = sorted(BACKUPS_DIR.glob("aiws-state-*.tar.gz"), reverse=True)
                 target = backups[0] if backups else None
             else:
                 target = (BACKUPS_DIR / Path(query_file).name).resolve()
@@ -1502,7 +1502,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
             temp_archive = BACKUPS_DIR / f"import-{int(time.time())}.tar.gz"
             temp_archive.write_bytes(body)
-            ok, out = await run_cmd_async(["ai", "state", "import", str(temp_archive)], timeout=60.0)
+            ok, out = await run_cmd_async(["aiws", "state", "import", str(temp_archive)], timeout=60.0)
             resp_data = {"ok": ok, "output": out}
 
         elif clean_path == "/api/models/fetch":
@@ -1525,7 +1525,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         f"{normalized.replace('/v1', '')}/api/tags",
                     ]
 
-                    headers = {"Accept": "application/json", "User-Agent": "ai-workstation/1.0"}
+                    headers = {"Accept": "application/json", "User-Agent": "aiws/1.0"}
                     if isinstance(req_headers, dict):
                         for hk, hv in req_headers.items():
                             if isinstance(hk, str) and isinstance(hv, str) and hk.strip() and hv.strip():
@@ -1735,7 +1735,7 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
             await writer.drain()
         target_cmd = ["tail", "-n", "80", "-F", str(APP_LOG_FILE)]
     elif endpoint == "/api/logs/workstation":
-        target_cmd = ["docker", "logs", "--tail", "80", "-f", "ai-workstation-cli"]
+        target_cmd = ["docker", "logs", "--tail", "80", "-f", "aiws-cli"]
     elif endpoint == "/api/tunnel/logs":
         target_cmd = ["sudo", "journalctl", "-u", "cloudflared", "-n", "80", "-f"]
 
@@ -1788,7 +1788,7 @@ async def main():
     _reap_zombies_and_leaked_streams()
     server = await asyncio.start_server(handle_request, DAEMON_HOST, DAEMON_PORT)
     addr = server.sockets[0].getsockname()
-    print(f"AI Workstation Host Control Daemon listening on http://{addr[0]}:{addr[1]}")
+    print(f"AIWS Host Control Daemon listening on http://{addr[0]}:{addr[1]}")
     async with server:
         await server.serve_forever()
 

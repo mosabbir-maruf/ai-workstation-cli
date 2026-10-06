@@ -46,7 +46,7 @@ Please verify each item before submitting:
 - [ ] My pull request is focused on a single logical change.
 - [ ] I have run `git diff --check` and verified no whitespace or formatting errors exist.
 - [ ] I have verified that all modified scripts pass syntax checks (`bash -n <script>`).
-- [ ] I have run `ai doctor` (where applicable on a live workstation host).
+- [ ] I have run `aiws doctor` (where applicable on a live workstation host).
 - [ ] **No secrets, tokens, private keys (`*.pem`), credentials, or `.env` files are committed**.
 - [ ] **No host runtime state (`runtime/`, `secrets/`, `*.tar.gz`) is committed**.
 - [ ] The existing security model (non-root `sandbox`, no Docker socket, no host `~/.ssh`) is preserved.
