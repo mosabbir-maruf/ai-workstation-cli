@@ -2096,6 +2096,137 @@ render_menu() {
     return "$selected"
 }
 
+
+cmd_edit_configs() {
+    while true; do
+        load_env 2>/dev/null || true
+        clear
+        print_aiws_banner
+        echo
+        local edit_opts=(
+            "Edit Host API Key"
+            "Edit GitHub App Integration"
+            "Edit Cloudflare Tunnel"
+            "Edit Workspace Project"
+            "Back to Main Menu"
+        )
+        local choice=0
+        render_menu "Rotate & Edit Configurations" "${edit_opts[@]}" || choice=$?
+        
+        case "$choice" in
+            0)
+                clear
+                print_header "EDIT HOST API KEY"
+                local current_key="${WORKSTATION_API_KEY:-}"
+                if [[ -n "$current_key" ]]; then
+                    echo -e "[90mCurrent status: [32mConfigured[0m (${current_key:0:6}••••••••)[0m"
+                else
+                    echo -e "[90mCurrent status: [33mNo API Key configured[0m[0m"
+                fi
+                echo -e "[90m[1m[1][0m Auto-generate a secure 32-byte API key[0m"
+                echo -e "[90m[1m[2][0m Enter a custom API key (Paste new value)[0m"
+                echo -e "[90m[1m[b][0m Back to Edit Menu[0m"
+                echo -e -n "
+[90m[[36m?[90m][0m Select option [1/2/b] (default: b): "; read -r edit_choice || true
+                case "${edit_choice:-b}" in
+                    1)
+                        local gen_key
+                        gen_key="$(python3 -c 'import secrets; print("aiws_" + secrets.token_hex(24))' 2>/dev/null || openssl rand -hex 24)"
+                        set_env_var "WORKSTATION_API_KEY" "$gen_key"
+                        cmd_daemon restart >/dev/null 2>&1 || true
+                        echo -e "
+[32m✓ API Key Generated and Saved: ${gen_key}[0m"
+                        sleep 2
+                        ;;
+                    2)
+                        local custom_key
+                        echo -e -n "
+[90m[[36m?[90m][0m Paste new WORKSTATION_API_KEY: "; read -r custom_key || true
+                        if [[ -n "$custom_key" ]]; then
+                            set_env_var "WORKSTATION_API_KEY" "$custom_key"
+                            cmd_daemon restart >/dev/null 2>&1 || true
+                            echo -e "
+[32m✓ Custom API Key Saved[0m"
+                        else
+                            echo -e "
+[33mNo input. Aborted.[0m"
+                        fi
+                        sleep 2
+                        ;;
+                    *) ;;
+                esac
+                ;;
+            1)
+                clear
+                cmd_github setup
+                echo -e "
+Press any key to return..."
+                read -rsn1 || true
+                ;;
+            2)
+                clear
+                [[ -f "$TUNNEL_LIB" ]] && bash "$TUNNEL_LIB" setup || echo "Tunnel module missing."
+                echo -e "
+Press any key to return..."
+                read -rsn1 || true
+                ;;
+            3)
+                clear
+                print_header "EDIT WORKSPACE PROJECT"
+                echo -e "[90mCurrent active project: [32m${ACTIVE_PROJECT:-None}[0m[0m"
+                echo -e "[90m[1m[1][0m Clone a new GitHub repository URL[0m"
+                echo -e "[90m[1m[2][0m Select from existing cloned projects[0m"
+                echo -e "[90m[1m[b][0m Back to Edit Menu[0m"
+                echo -e -n "
+[90m[[36m?[90m][0m Select option [1/2/b] (default: b): "; read -r proj_choice || true
+                case "${proj_choice:-b}" in
+                    1)
+                        local repo_url
+                        echo -e -n "
+[90m[[36m?[90m][0m Paste GitHub repository URL: "; read -r repo_url || true
+                        if [[ -n "$repo_url" ]]; then
+                            cmd_add "$repo_url"
+                        fi
+                        echo -e "
+Press any key to return..."
+                        read -rsn1 || true
+                        ;;
+                    2)
+                        local existing_projects=()
+                        for p in "$PROJECTS_DIR"/*; do
+                            if [[ -d "$p" && ! -L "$p" ]]; then
+                                existing_projects+=("$(basename "$p")")
+                            fi
+                        done
+                        if [[ ${#existing_projects[@]} -eq 0 ]]; then
+                            echo -e "
+[33mNo existing projects found in $PROJECTS_DIR[0m"
+                        else
+                            echo -e "
+[1mSelect a project to set as active:[0m"
+                            select p_name in "${existing_projects[@]}"; do
+                                if [[ -n "$p_name" ]]; then
+                                    cmd_use "$p_name"
+                                    break
+                                else
+                                    echo "Invalid selection"
+                                fi
+                            done
+                        fi
+                        echo -e "
+Press any key to return..."
+                        read -rsn1 || true
+                        ;;
+                    *) ;;
+                esac
+                ;;
+            4)
+                break
+                ;;
+        esac
+    done
+}
+
 cmd_tui() {
     load_env 2>/dev/null || true
     local is_setup_mode=0
@@ -2128,7 +2259,7 @@ cmd_tui() {
             "View Logs"
             "Open Shell"
             "Setup & Configuration"
-            "Cloud & Git Integrations"
+            "Edit Integrations & Configs"
             "Update AIWS CLI"
             "Uninstall AIWS"
             "Help / CLI Commands"
@@ -2153,16 +2284,7 @@ cmd_tui() {
             3) cmd_logs ;;
             4) cmd_shell ;;
             5) cmd_setup ;;
-            6) 
-               local tunnel_opts=("GitHub App Setup" "Cloudflare Tunnel Setup" "Back to Main Menu")
-               local tun_choice=0
-               render_menu "Cloud & Git Integrations" "${tunnel_opts[@]}" || tun_choice=$?
-               if [[ "$tun_choice" -eq 0 ]]; then
-                   cmd_github setup
-               elif [[ "$tun_choice" -eq 1 ]]; then
-                   [[ -f "$TUNNEL_LIB" ]] && bash "$TUNNEL_LIB" setup || echo "Tunnel module missing."
-               fi
-               ;;
+            6) cmd_edit_configs ;;
             7) cmd_update ;;
             8) cmd_uninstall ;;
             9) 
