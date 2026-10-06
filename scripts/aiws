@@ -1774,6 +1774,7 @@ ${_C_BOLD}Project:${_C_RESET} $proj_badge
 ${_C_BOLD}Daemon:${_C_RESET}  $daemon_badge
 ${_C_BOLD}GitHub:${_C_RESET}  $github_badge
 ${_C_BOLD}Tunnel:${_C_RESET}  $tunnel_badge
+${_C_BOLD}Creator:${_C_RESET} Mosabbir Maruf
 EOF2
 }
 
