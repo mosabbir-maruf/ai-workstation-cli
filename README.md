@@ -2,14 +2,12 @@
   <img src="docs/assets/logo.svg" alt="AIWS Logo" width="120" height="120" />
 </p>
 
-<h1 align="center">AIWS</h1>
-
----
+<h1 align="center">AIWS — AI Workstation CLI</h1>
 
 <p align="center">
-  <strong>A secure and reusable development workstation for VPS, with isolated Docker projects, DeepSeek Harness, GitHub App authentication, SSH previews, and simple lifecycle management.</strong>
+  <strong>A secure, container-isolated development environment for remote Linux VPS, featuring DeepSeek Harness agent workflows, brokered GitHub authentication, and host control tooling.</strong>
   <br />
-  <em>Looking for the web console? Check out the <a href="https://github.com/mosabbir-maruf/aiws">AIWS Web Interface</a>.</em>
+  <em>Companion Web Interface: <a href="https://github.com/mosabbir-maruf/aiws">AIWS Web Dashboard</a></em>
 </p>
 
 <p align="center">
@@ -19,9 +17,7 @@
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/runtime-Docker-blue" alt="Runtime" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/AI%20runtime-DeepSeek%20Harness-black" alt="AI Runtime" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg" alt="Contributing" /></a>
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-red.svg" alt="Security Policy" /></a>
-  <a href="https://github.com/mosabbir-maruf"><img src="https://img.shields.io/badge/maintainer-Mosabbir%20Maruf-181717?logo=github" alt="Maintainer" /></a>
 </p>
 
 <p align="center">
@@ -32,404 +28,152 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Security Model](#security-model)
-- [Repository Structure](#repository-structure)
-- [Host Runtime Structure](#host-runtime-structure)
-- [Requirements](#requirements)
-- [Clone the Repository](#clone-the-repository)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [GitHub Authentication](#github-authentication)
-- [Daily Workflow](#daily-workflow)
-- [CLI Reference](#cli-reference)
-- [Project Lifecycle](#project-lifecycle)
-- [Harness and DSH Lifecycle](#harness-and-dsh-lifecycle)
-- [Preview and SSH Tunneling](#preview-and-ssh-tunneling)
-- [Anywhere Access via Cloudflare Tunnel](#anywhere-access-via-cloudflare-tunnel)
-- [Git Workflow](#git-workflow)
-- [Cache Management](#cache-management)
-- [State Backup and Recovery](#state-backup-and-recovery)
-- [Updates and Upgrades](#updates-and-upgrades)
-- [CI/CD](#cicd)
-- [Operational Runbook](#operational-runbook)
-- [Troubleshooting](#troubleshooting)
-- [Security Checklist](#security-checklist)
-- [Design Decisions](#design-decisions)
-- [Quick Reference](#quick-reference)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
-- [Maintainer](#maintainer)
+1. [Overview & Architecture](#1-overview--architecture)
+2. [Prerequisites & Supported Platforms](#2-prerequisites--supported-platforms)
+3. [Quick Start](#3-quick-start)
+4. [Configuration Reference](#4-configuration-reference)
+5. [Everyday Usage](#5-everyday-usage)
+6. [Service Management](#6-service-management)
+7. [Backup, Recovery & Updates](#7-backup-recovery--updates)
+8. [Troubleshooting](#8-troubleshooting)
+9. [Security Model & Trust Boundaries](#9-security-model--trust-boundaries)
+10. [Development & Verification](#10-development--verification)
+11. [Uninstallation & References](#11-uninstallation--references)
 
 ---
 
-## Overview
+## 1. Overview & Architecture
 
-AIWS provides one reusable development environment on a remote Linux VPS.
+AIWS provides one unified, reproducible development environment on a remote server. Instead of configuring tools and agents directly on the host, development projects run inside an isolated Docker container, while project files, agent history, and credentials persist safely on the host.
 
-Projects remain ordinary Git repositories on the host under `~/projects/`. Only the currently selected project is mounted into the workstation container at `/workspace`.
+### Core Capabilities
 
-The workstation contains the common developer runtime and DeepSeek Harness. DSH installation and DSH state are persisted outside the disposable container filesystem, allowing the container/image to be replaced without intentionally losing Harness state.
+- **One Container, Many Projects:** Code repositories live under `~/projects/` on the host. Only the active project is mounted into the container at `/workspace`.
+- **Persistent AI Agent Runtime:** DeepSeek Harness (`@deepseek-ai/dsh`) session memory and provider keys persist in `runtime/dsh/` across container restarts and image upgrades.
+- **Brokered GitHub Credentials:** A host-side broker issues short-lived installation tokens over a local Unix domain socket. Long-lived personal access tokens (PATs) and host SSH keys are never mounted into containers.
+- **Host Control Daemon:** An asynchronous control bridge (`daemon/server.py` on `127.0.0.1:8000`) provides authenticated REST and SSE endpoints for the companion web dashboard.
+- **Interactive Terminal UI:** Run `aiws` to launch a full-screen, keyboard-navigable terminal dashboard.
 
-The system has four major boundaries:
-
-1. **Host management layer** — Docker, projects, runtime state, secrets, and the `aiws` CLI.
-2. **Workstation container** — isolated developer runtime plus the selected project.
-3. **GitHub broker** — GitHub App credential flow through a Unix socket instead of a PAT or host SSH key inside the container.
-4. **Existing infrastructure** — the existing gateway/reverse-proxy stack remains separate.
-
----
-
-## Architecture
-
-### High-level architecture
+### Architecture Flow
 
 ```text
-                                  INTERNET
-                                      │
-                       ┌──────────────┴──────────────┐
-                       │                             │
-                  SSH :1182                      HTTPS :443
-                       │                             │
-                       ▼                             ▼
-                ┌────────────┐             ┌─────────────────────┐
-                │ Mac / Admin│             │ Existing Reverse    │
-                │   Client   │             │ Proxy / Nginx       │
-                └─────┬──────┘             └──────────┬──────────┘
-                      │                               │
-                SSH tunnel                            ▼
-                      │                      Existing application stack
-                      ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                            Ubuntu VPS / Host                               │
-│                                                                            │
-│  ┌──────────────────────┐       ┌───────────────────────────────────────┐  │
-│  │ ~/projects/          │       │ ~/aiws-cli/                 │  │
-│  │                      │       │                                       │  │
-│  │ project-a/           │       │ scripts/aiws                            │  │
-│  │ project-b/           │       │ docker/                               │  │
-│  │ active-project/ ─────┼──────►│ runtime/                              │  │
-│  │                      │       │ secrets/                              │  │
-│  └──────────┬───────────┘       │ .env                                  │  │
-│             │                   └────────────────┬──────────────────────┘  │
-│             │                                    │                         │
-│             │ /workspace mount                   │ Docker Compose          │
-│             ▼                                    ▼                         │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                          aiws-cli                          │  │
-│  │                                                                      │  │
-│  │  User: sandbox (UID 1001)                                            │  │
-│  │  Node.js + Git + SSH client + ripgrep + fd + procps + tini           │  │
-│  │                                                                      │  │
-│  │  /workspace                  ← active project only                   │  │
-│  │  /home/sandbox/.dsh          ← persistent DSH state                  │  │
-│  │  /home/sandbox/.npm-global   ← persistent DSH installation           │  │
-│  │                                                                      │  │
-│  │  DSH:     127.0.0.1:4090                                             │  │
-│  │  Bridge:  0.0.0.0:4091                                               │  │
-│  │  App:     project-selected development port(s)                       │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                              ▲                                             │
-│                              │ Unix socket                                 │
-│                   ┌──────────┴───────────┐                                 │
-│                   │ GitHub broker runtime│                                 │
-│                   │ github.sock          │                                 │
-│                   └──────────┬───────────┘                                 │
-│                              │                                             │
-│                   GitHub App private key                                   │
-│                              │                                             │
-│                   secrets/github-app.pem                                   │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Data flow
-
-```text
-Mac / operator
-     │
-     │ SSH
-     ▼
-Host CLI: aiws
-     │
-     ├── project selection
-     ├── Git operations
-     ├── workstation lifecycle
-     ├── Harness lifecycle
-     ├── app lifecycle
-     ├── cache maintenance
-     └── preview/tunnel generation
-     │
-     ▼
-Docker workstation
-     │
-     ├── selected project at /workspace
-     ├── persistent DSH state
-     ├── persistent DSH installation
-     ├── app runtime state
-     ├── Harness runtime state
-     └── GitHub broker socket
-```
-
-### Component responsibilities
-
-| Component | Responsibility | Persistence |
-|---|---|---|
-| `scripts/aiws` | Main operator CLI | Git |
-| `docker/Dockerfile` | Base workstation image | Git / GHCR |
-| `docker/compose.yml` | Runtime, mounts, limits, ports | Git |
-| `docker/entrypoint.sh` | Container bootstrap and DSH installation | Git |
-| `docker/app-runner.sh` | Project process runner | Git |
-| `docker/harness.sh` | DSH + bridge lifecycle | Git |
-| `docker/github-app-credential-helper` | Container-side Git credential helper | Git |
-| `scripts/lib/github.sh` | GitHub App/broker management | Git |
-| `broker/` | Host-side broker implementation | Git |
-| `runtime/dsh/` | DSH state/config/history | Host persistent |
-| `runtime/npm-global/` | DSH installation | Host persistent |
-| `runtime/app/` | App PID/log state | Disposable |
-| `runtime/harness/` | Harness PID/log state | Disposable |
-| `runtime/github-broker/` | Broker socket/runtime | Runtime |
-| `~/projects/` | Git working copies | Host persistent |
-| GitHub Actions | ARM64 image build/publish | CI |
-| GHCR | Container image registry | External |
-
----
-
-## Security Model
-
-The workstation is intentionally isolated from sensitive host capabilities.
-
-### Container security
-
-The current runtime is configured to:
-
-- run as non-root `sandbox` (UID `1001`);
-- drop all Linux capabilities (`cap_drop: [ALL]`);
-- enable `no-new-privileges: true`;
-- remain non-privileged (`privileged: false`);
-- limit memory to 512 MB;
-- limit CPU to 1.5 CPUs;
-- limit processes to 256 PIDs;
-- use `/tmp` as `noexec,nosuid,size=128m` tmpfs;
-- avoid host networking;
-- avoid the host Docker socket (`/var/run/docker.sock` is never mounted);
-- avoid mounting the host `~/.ssh`;
-- mount only the active project at `/workspace`;
-- mount the GitHub broker socket directory as read-only (`:ro`).
-
-### Credential boundary
-
-GitHub credentials do not need to be copied into the workstation.
-
-```text
-Git inside container
+Operator / Browser
        │
+       │ SSH Port Forwarding / Cloudflare Tunnel
        ▼
-credential helper
-       │
-       ▼
-Unix socket (/run/ai-github-broker/github.sock)
-       │
-       ▼
-host GitHub broker (ai-github-broker service)
-       │
-       ▼
-GitHub App authentication (RS256 JWT using secrets/github-app.pem)
-       │
-       ▼
-GitHub API (short-lived in-memory token)
-```
-
-The credential helper does not persist GitHub tokens through Git's credential store.
-
-### Secret locations
-
-Sensitive files are host-only:
-
-```text
-.env                         mode 0600
-secrets/github-app.pem       mode 0600
-secrets/cloudflared-token    mode 0600
-runtime/dsh/                 mode 0700
-runtime/dsh/ui-providers.json mode 0600
-runtime/dsh/.credentials.yaml mode 0600
-```
-
-Never commit private keys, tokens, credentials, or `.env`.
-
-> [!WARNING]
-> **Active Project Trust Boundary Notice:**  
-> Code running inside `/workspace` executes as the container user `sandbox`. Because in-container Git requires access to the broker socket to clone and push code, any script running in the container can request temporary GitHub installation tokens for repositories granted to the GitHub App. Additionally, DSH runtime state (`~/.dsh`) is accessible to the container user. Only clone and execute repositories whose dependency trees you trust. For detailed threat modeling, see [SECURITY.md](SECURITY.md).
-
----
-
-## Repository Structure
-
-```text
-ai-workstation-cli/
-├── .env.example                     # Environment template
-├── .dockerignore                    # Build context exclusions
-├── .gitignore                       # Ignored runtime and local secrets
-├── CONTRIBUTING.md                  # Contributor guidelines
-├── LICENSE                          # MIT License
-├── README.md                        # Primary architecture & operational guide
-├── SECURITY.md                      # Security policy & threat boundary specs
-├── install.sh                       # Host installation & systemd setup script
-├── update.sh                        # Fast-forward update script
-├── uninstall.sh                     # Idempotent host uninstallation script
-│
-├── .github/
-│   ├── ISSUE_TEMPLATE/              # Bug and feature issue forms
-│   └── workflows/
-│       └── image.yml                # Automated test & multi-arch image workflow
-│
-├── broker/
-│   └── github_broker.py             # Host-side GitHub App token broker
-│
-├── config/
-│   └── projects.yml                 # Local project configuration registry
-│
-├── contracts/
-│   └── openapi.yaml                 # Canonical OpenAPI 3.1 contract specification
-│
-├── daemon/
-│   └── server.py                    # Host HTTP/SSE control bridge daemon (port 8000)
-│
-├── docker/
-│   ├── Dockerfile                   # Node 22 Bookworm Slim multi-arch image
-│   ├── compose.yml                  # Workstation runtime & security definition
-│   ├── entrypoint.sh                # Container bootstrap & DSH link setup
-│   ├── app-runner.sh                # Application supervisor process runner
-│   ├── harness.sh                   # DSH agent engine + TCP bridge supervisor
-│   └── github-app-credential-helper # Container-side credential helper
-│
-├── docs/
-│   ├── github-app-setup.md          # Step-by-step GitHub App configuration guide
-│   └── cloudflare-tunnel.md         # Remote ingress & Cloudflare Tunnel guide
-│
-├── scripts/
-│   ├── aiws                         # Main CLI and interactive Terminal UI (TUI)
-│   ├── github-app-credential-helper # Host-side Git credential helper
-│   └── lib/
-│       ├── github.sh                # GitHub App & broker service helpers
-│       ├── tunnel.sh                # Cloudflare Tunnel helpers
-│       └── ports.sh                 # Container listening port detector
-│
-└── tests/                           # Automated Python unit & integration test suite
-    ├── test_auth.py                 # Fail-closed authentication & permissions tests
-    ├── test_env_safety.py           # Non-executable literal .env parsing tests
-    ├── test_sse_and_process.py      # Output bounding & concurrent SSE tests
-    ├── test_ssrf_and_limits.py      # IP pinning, SSRF & HTTP framing tests
-    └── test_state_transfer.py       # Raw gzip import & byte-identical download tests
+Host Management Layer (Ubuntu VPS)
+  ├── Host CLI (`aiws`)
+  ├── Control Daemon (`daemon/server.py:8000`, requires Bearer auth)
+  ├── GitHub Broker Service (`ai-github-broker.service`)
+  ├── Secrets (`.env`, `secrets/github-app.pem` — mode 0600)
+  ├── Persistent Projects (`~/projects/*`)
+  └── Persistent Agent State (`runtime/dsh/` — mode 0700)
+        │
+        │ Docker Compose (non-root, cap_drop: ALL, 512M RAM)
+        ▼
+Workstation Container
+  ├── User: sandbox (UID 1001)
+  ├── Mounted Workspace: `/workspace` (Active project only)
+  ├── DeepSeek Harness (DSH on 4090, Bridge on 4091)
+  ├── App Dev Server (ports 3000, 3001, 5173, 8080 on 127.0.0.1)
+  └── Credential Helper (`/run/ai-github-broker/github.sock` read-only mount)
 ```
 
 ---
 
-## Host Runtime Structure
+## 2. Prerequisites & Supported Platforms
 
-The host management layer maintains persistent state outside the disposable container:
-
-| Path | Purpose | Persistence | Permissions |
-|---|---|---|---|
-| `~/projects/` | Git working copies of your projects | Host persistent | User default |
-| `runtime/dsh/` | DSH agent conversation history and provider keys | Host persistent | `0700` (`0600` files) |
-| `runtime/npm-global/` | Pinned `@deepseek-ai/dsh` package install | Host persistent | `0700` |
-| `runtime/github-broker/` | Unix domain socket (`github.sock`) | Runtime socket | `0770` (group `ai-broker`) |
-| `runtime/app/` | Dev server PID and output log state | Disposable | `0700` |
-| `runtime/harness/` | DSH agent and TCP bridge PID/log state | Disposable | `0700` |
-| `secrets/` | Host-only credentials (`github-app.pem`) | Host-only | `0700` (`0600` files) |
-| `~/aiws-state-backups/`| Exported state snapshots (`.tar.gz`) | Host persistent | `0600` |
-
----
-
-## Requirements
-
-### Supported Platforms & Status
+### Supported Platforms
 
 | Platform | Support Tier | Verification Status | Notes |
 |---|---|---|---|
-| **Ubuntu 24.04 / 22.04 LTS** | Tier 1 (Target Host) | Runtime verification pending | Recommended distribution for systemd background services and apt tooling. |
+| **Ubuntu 24.04 / 22.04 LTS** | Tier 1 (Target Host) | Runtime verification pending | Recommended distribution for systemd services, Docker, and apt. |
 | **Debian 12 (Bookworm)** | Tier 1 (Compatible) | Runtime verification pending | Supported base for systemd units and packages. |
 | **macOS (Darwin arm64 / x86_64)** | Development / Testing | Behaviorally verified | Full support for CLI commands, Docker builds, and automated unit tests. Host systemd units require Linux. |
 
 ### Software Prerequisites
 
-- **Docker Engine:** `24.0+`
+Ensure the following tools are installed before setup:
+
+- **Docker Engine:** `24.0+` (`docker --version`)
 - **Docker Compose Plugin:** `v2.20+` (`docker compose version`)
 - **Python:** `3.8+` with `venv` and `ensurepip` (`python3 --version`)
 - **Git:** `2.30+` (`git --version`)
 - **Bash:** `3.2+` (Bash 4+ recommended on Linux)
-- **OpenSSL:** For generating cryptographic secrets (`openssl version`)
-- **curl:** For health checks and API validation
+- **OpenSSL:** For generating cryptographic tokens (`openssl version`)
+- **curl:** For testing HTTP endpoints and health checks
 
 ---
 
-## Clone the Repository
+## 3. Quick Start
 
-Clone into your user directory (default: `~/aiws-cli`):
+Follow these steps in sequence on a clean host to get AIWS running:
+
+### Step 1: Clone the Repository
 
 ```bash
 git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git ~/aiws-cli
 cd ~/aiws-cli
 ```
 
+### Step 2: Initialize Configuration and Generate API Key
+
+Copy the environment template and generate a 32-byte hexadecimal API key for the host control daemon:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+
+# Generate mandatory daemon authentication key
+KEY=$(openssl rand -hex 32)
+sed -i.bak "s|^WORKSTATION_API_KEY=.*|WORKSTATION_API_KEY=${KEY}|" .env && rm -f .env.bak
+```
+
+### Step 3: Run the Host Installer
+
+Run `install.sh` to initialize the Python virtual environment, configure file permissions, register the `/usr/local/bin/aiws` symlink, and configure systemd units:
+
+```bash
+./install.sh
+```
+
+### Step 4: Start the Workstation Container
+
+```bash
+aiws start
+```
+
+### Step 5: Verify Health and Service Status
+
+Verify that the CLI, daemon, and workstation container are healthy:
+
+```bash
+# 1. Inspect unified system status
+aiws status
+
+# 2. Run diagnostic doctor probe
+aiws doctor
+
+# 3. Query daemon HTTP health endpoint on loopback
+API_KEY=$(grep '^WORKSTATION_API_KEY=' .env | cut -d= -f2)
+curl -fsS -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8000/api/health
+```
+
+*Expected response:* `{"ok": true, "output": "Host workstation daemon active."}`
+
 ---
 
-## Installation
+## 4. Configuration Reference
 
-### Step-by-Step Setup
+All settings are stored in `.env` at the repository root. This file contains secrets and **must maintain mode `0600`**.
 
-1. **Initialize configuration template:**
-   ```bash
-   cp .env.example .env
-   chmod 600 .env
-   ```
-
-2. **Generate a cryptographically secure 32-byte daemon key:**
-   ```bash
-   KEY=$(openssl rand -hex 32)
-   sed -i.bak "s|^WORKSTATION_API_KEY=.*|WORKSTATION_API_KEY=${KEY}|" .env && rm -f .env.bak
-   ```
-
-3. **Run the host installation script:**
-   ```bash
-   ./install.sh
-   ```
-   *What this performs:* sets up `.venv`, installs `PyJWT[crypto]`, initializes `runtime/` and `secrets/` with mode `0700`, installs `/usr/local/bin/aiws`, and registers `aiws-daemon` and `ai-github-broker` systemd units.
-
-4. **Launch the primary workstation container:**
-   ```bash
-   aiws start
-   ```
-
-5. **Verify health status:**
-   ```bash
-   # CLI diagnostic probe
-   aiws status
-   aiws doctor
-
-   # Daemon loopback health endpoint
-   API_KEY=$(grep '^WORKSTATION_API_KEY=' .env | cut -d= -f2)
-   curl -s -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8000/api/health
-   ```
-   *Expected response:* `{"ok": true, "output": "Host workstation daemon active."}`
-
----
-
-## Configuration
-
-All configuration is managed through `.env`. The file must maintain mode `0600`.
-
-### Configuration Reference Table
-
-| Variable Key | Required? | Default / Example | Purpose & Scope | Security Precautions |
+| Variable | Required? | Default / Example | Purpose | Security Precautions |
 |---|---|---|---|---|
-| `WORKSTATION_API_KEY` | **Yes** | `$(openssl rand -hex 32)` | Master Bearer credential for daemon (`server.py`). Required by frontend proxy. | Mode `0600`. Daemon refuses startup if missing or empty. |
-| `AIWS_INSECURE_LOCAL` | Optional | `0` (or unset) | Set to `1` only to allow running daemon without an API key during offline development. | **Never enable in production.** Exposes arbitrary command execution. |
-| `IMAGE` | Optional | `ghcr.io/mosabbir-maruf/aiws-cli:latest` | Workstation container image tag. | Pin to commit SHA (`@sha256:...`) in high-assurance setups. |
+| `WORKSTATION_API_KEY` | **Yes** | `$(openssl rand -hex 32)` | Master Bearer credential for the daemon (`server.py`) and frontend proxy. | Mode `0600`. The daemon will refuse to start if this variable is missing or empty. |
+| `AIWS_INSECURE_LOCAL` | Optional | `0` (or unset) | Set to `1` only to allow running the daemon without an API key during offline development. | **Never enable in production.** Exposes arbitrary host command execution. |
+| `IMAGE` | Optional | `ghcr.io/mosabbir-maruf/aiws-cli:latest` | Workstation container image tag. | Pin to commit digest (`@sha256:...`) in high-assurance environments. |
 | `DSH_VERSION` | Optional | `0.1.2-rc.1` | Pinned npm package version for DeepSeek Harness (`@deepseek-ai/dsh`). | Updates can be applied via `aiws dsh update <version>`. |
-| `ACTIVE_PROJECT` | Managed | `my-app` | Active project repository under `~/projects/`. | Managed automatically by `aiws use <project>`. |
+| `ACTIVE_PROJECT` | Managed | `my-app` | Identifier of the active project repository under `~/projects/`. | Managed automatically by `aiws use <project>`. |
 | `ACTIVE_PROJECT_PATH` | Managed | `/home/<user>/projects/my-app` | Host path mounted to `/workspace` inside the container. | Auto-updated on project switch. |
 | `WORKSTATION_DAEMON_HOST`| Optional | `127.0.0.1` | Network bind address for host control daemon. | Keep bound strictly to loopback (`127.0.0.1`). |
 | `WORKSTATION_DAEMON_PORT`| Optional | `8000` | TCP port for daemon HTTP/SSE listener. | Ensure no host port conflict. |
@@ -439,7 +183,7 @@ All configuration is managed through `.env`. The file must maintain mode `0600`.
 | `CLOUDFLARED_APP_HOSTNAME`| Optional | `app.example.com` | Public tunnel hostname for the active development server. | Set during Cloudflare tunnel setup. |
 | `CLOUDFLARED_DSH_HOSTNAME`| Optional | `dsh.example.com` | Public tunnel hostname for DeepSeek Harness bridge. | Set during Cloudflare tunnel setup. |
 
-To safely update configuration via CLI helper:
+To edit settings safely with automatic syntax verification:
 
 ```bash
 aiws config
@@ -447,385 +191,248 @@ aiws config
 
 ---
 
-## GitHub Authentication
+## 5. Everyday Usage
 
-GitHub authentication is brokered over a local Unix domain socket rather than copying PATs or SSH keys into the container:
+### Interactive Terminal UI (TUI)
 
-```bash
-# 1. Configure GitHub App credentials
-aiws github setup <app_id> <installation_id> /path/to/private-key.pem
-
-# 2. Test token generation
-aiws github test
-```
-
-For complete step-by-step GitHub App creation, consult [docs/github-app-setup.md](docs/github-app-setup.md).
-
----
-
-## Daily Workflow
-
-```bash
-# 1. Add and select a project
-aiws add https://github.com/org/my-project.git
-aiws use my-project
-
-# 2. Launch application dev server
-aiws run
-
-# 3. Stream logs and inspect status
-aiws status
-aiws app logs
-
-# 4. Synchronize Git changes safely
-aiws diff
-aiws pull
-aiws push "feat: add user authentication"
-
-# 5. Open an interactive shell inside the container
-aiws shell
-```
-
----
-
-## CLI Reference
-
-Launch the interactive Terminal UI (TUI) simply by running:
+Launch the interactive dashboard at any time:
 
 ```bash
 aiws
 ```
 
-Direct command reference:
+Use arrow keys or numbers to manage projects, start/stop services, stream logs, pull/push Git changes, or inspect ports. Press `q` to return or exit.
 
-```text
-PROJECTS
-  aiws add <github-url>       Clone project into ~/projects/
-  aiws use <project>          Select project and mount to /workspace
-  aiws list                   List all local projects
-  aiws remove <project>       Delete project checkout from host
+### Core CLI Commands
 
-CONTAINER & APP
-  aiws start                  Start workstation container
-  aiws stop                   Stop workstation container
-  aiws restart                Restart container
-  aiws status                 Display unified system and service status
-  aiws shell                  Open bash prompt as sandbox user in /workspace
-  aiws run                    Launch application development server
-  aiws app status             Inspect application process state
-  aiws app logs               Stream application dev server logs
-  aiws app restart            Restart application process
-  aiws app stop               Terminate application process
-
-GIT OPERATIONS
-  aiws diff                   Show working tree and staged diffs
-  aiws pull                   Fast-forward pull from upstream origin
-  aiws push "<commit message>" Verify no secrets staged, commit, and push
-
-AGENT HARNESS (DSH)
-  aiws harness status         Inspect DSH (4090) and Bridge (4091) processes
-  aiws harness restart        Restart DSH and bridge supervisor
-  aiws dsh version            Show installed @deepseek-ai/dsh package version
-  aiws dsh update [version]   Update or reinstall DSH agent package
-
-INGRESS & PREVIEWS
-  aiws preview                Detect listening ports and print SSH forward command
-  aiws tunnel setup           Configure Cloudflare Zero Trust tunnel connector
-  aiws tunnel status          Inspect Cloudflare Tunnel connection status
-  aiws tunnel sync [port]     Update tunnel ingress application port
-
-MAINTENANCE & BACKUPS
-  aiws doctor                 Run full diagnostic health check
-  aiws cache prune            Prune Docker build caches and dangling images
-  aiws state export           Create atomic .tar.gz snapshot in ~/aiws-state-backups/
-  aiws state import <archive> Safely import state snapshot with rollback protection
-  aiws upgrade                Pull latest verified codebase and restart services
-  aiws uninstall              Remove background services, containers, and CLI links
-```
-
----
-
-## Project Lifecycle
-
-When you run `aiws use <project>`, AIWS updates `ACTIVE_PROJECT` and `ACTIVE_PROJECT_PATH` in `.env`, automatically re-creates the container with the newly selected project mounted at `/workspace`, and configures container-side Git credentials. Unselected repositories in `~/projects/` remain completely unmounted.
-
----
-
-## Harness and DSH Lifecycle
-
-DeepSeek Harness runs inside the workstation container:
-- The DSH process listens on `127.0.0.1:4090`.
-- A Node.js TCP bridge exposes DSH to container `0.0.0.0:4091`, mapped to host `127.0.0.1:4090`.
-- Agent settings and conversation histories persist on the host under `runtime/dsh/`.
-- Provider API keys (DeepSeek, OpenAI, Anthropic, Gemini, Groq, OpenRouter, and custom local models) are managed atomically in `runtime/dsh/ui-providers.json` with mode `0600`.
-
----
-
-## Preview and SSH Tunneling
-
-AIWS binds all development ports strictly to `127.0.0.1` on the host. To view applications running on your remote VPS:
-
+#### Project Management
 ```bash
-aiws preview
+aiws add https://github.com/org/my-project.git   # Clone repository to ~/projects/
+aiws list                                          # List local repositories
+aiws use my-project                                # Mount project to /workspace
+aiws remove my-project                             # Delete project checkout
 ```
 
-Copy the generated SSH port-forwarding command to your local machine:
+#### Workstation & App Runtime
+```bash
+aiws start                  # Boot Docker Compose workstation container
+aiws stop                   # Halt workstation container
+aiws restart                # Restart container
+aiws status                 # Display unified service status
+aiws shell                  # Open bash prompt as sandbox user in /workspace
+aiws run                    # Auto-detect framework and launch dev server
+aiws app status             # Inspect application process state
+aiws app logs               # Stream live application dev server logs
+aiws app restart            # Restart application process
+aiws app stop               # Terminate application process
+```
 
+#### Git Operations with Secret Guardrails
+```bash
+aiws diff                   # Show working tree changes
+aiws pull                   # Fast-forward pull from upstream origin
+aiws push "feat: add auth"  # Verify no secrets staged, commit, and push
+```
+*`aiws push` scans staged files before committing and aborts immediately if sensitive patterns (`.env`, `*.pem`, `*.key`, `credentials.json`) are detected.*
+
+#### Ingress & Port Forwarding
+```bash
+aiws preview                # Detect active container ports and generate SSH tunnel command
+```
+Example SSH forward command for your local machine:
 ```bash
 ssh -N -L 3000:127.0.0.1:3000 -L 5173:127.0.0.1:5173 user@your-vps-ip
 ```
 
-Open `http://localhost:3000` or `http://localhost:5173` in your local browser.
-
----
-
-## Anywhere Access via Cloudflare Tunnel
-
-To securely access development previews and DSH without open firewall ports, configure a Cloudflare Zero Trust tunnel:
-
+#### DeepSeek Harness (DSH) Agent Engine
 ```bash
-aiws tunnel setup
+aiws harness status         # Inspect DSH (4090) and Bridge (4091) processes
+aiws harness restart        # Restart DSH and bridge supervisor
+aiws dsh version            # Show installed @deepseek-ai/dsh package version
+aiws dsh update 0.1.2-rc.1  # Update or reinstall DSH agent package
 ```
 
-Consult [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md) for full configuration steps and hostname mapping instructions.
+#### GitHub App Broker
+```bash
+aiws github setup <app_id> <inst_id> /path/to/key.pem   # Configure credentials
+aiws github test                                        # Test token generation
+```
+For complete GitHub App creation steps, see [docs/github-app-setup.md](docs/github-app-setup.md).
+
+#### Cloudflare Zero Trust Tunnel
+```bash
+aiws tunnel setup           # Configure tunnel connector and hostnames
+aiws tunnel status          # Inspect connection status
+aiws tunnel sync 3000       # Update target application port
+```
+For Cloudflare DNS configuration, see [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md).
 
 ---
 
-## Git Workflow
+## 6. Service Management
 
-The `aiws push` command protects operators from accidental credential disclosure:
-1. Verifies that Git author credentials (`user.name`, `user.email`) are configured.
-2. Stages changes and inspects staged filenames against sensitive patterns (`.env`, `*.pem`, `*.key`, `credentials.json`, `service-account*.json`).
-3. Rejects commits immediately if sensitive patterns match.
-4. Commits with your provided commit message and pushes to origin via the GitHub App credential broker.
+AIWS runs two host-level background services on Linux:
 
----
+- **`aiws-daemon.service`:** Host control daemon on `127.0.0.1:8000`.
+- **`ai-github-broker.service`:** GitHub App token broker socket on `runtime/github-broker/github.sock`.
 
-## Cache Management
-
-To reclaim disk space on your VPS:
+### Common Service Commands
 
 ```bash
-aiws cache prune
-```
+# Check service status
+systemctl status aiws-daemon ai-github-broker
 
-This cleans Docker build caches, dangling layers, and temporary runtime logs without touching your project repositories or DSH agent state.
+# Restart services
+sudo systemctl restart aiws-daemon
+sudo systemctl restart ai-github-broker
+
+# View live systemd logs
+journalctl -u aiws-daemon -f
+journalctl -u ai-github-broker -f
+```
 
 ---
 
-## State Backup and Recovery
+## 7. Backup, Recovery & Updates
 
-### Exporting State
+### Exporting State Snapshots
 
 ```bash
 aiws state export
 ```
 
-Exports a `.tar.gz` archive to `~/aiws-state-backups/` containing your `.env` configuration and `runtime/dsh/` agent history.
+Creates an archive at `~/aiws-state-backups/aiws-state-<timestamp>.tar.gz` containing your `.env` configuration and `runtime/dsh/` agent history.
 
-### Importing State
+### Importing State with Automatic Rollback
 
 ```bash
-aiws state import ~/aiws-state-backups/aiws-state-20261014-120000.tar.gz
+aiws state import ~/aiws-state-backups/aiws-state-<timestamp>.tar.gz
 ```
 
-**Rollback Guarantee:** AIWS validates archive paths and symlinks before extraction. It creates temporary backups of your existing `.env` and `runtime/dsh`. If extraction or replacement fails, your previous state is automatically restored.
+**Rollback Guarantee:** AIWS verifies archive structure, checks for traversal elements (`../`), and stages files before touching live state. If extraction or replacement fails, your previous `.env` and `runtime/dsh/` are restored automatically.
 
----
+### Cache Pruning
 
-## Updates and Upgrades
+```bash
+aiws cache prune
+```
 
-To update AIWS to the latest release:
+Cleans Docker build caches, dangling layers, and temporary logs without modifying project checkouts or agent state.
+
+### Updating AIWS
 
 ```bash
 ./update.sh
 ```
 
-The updater pulls the latest verified git commit, verifies dependencies, and restarts daemon services cleanly.
+Pulls the latest verified Git commits, verifies dependencies, and restarts daemon services cleanly.
 
 ---
 
-## CI/CD
+## 8. Troubleshooting
 
-The repository includes an automated GitHub Actions workflow (`.github/workflows/image.yml`) that:
-1. Runs Python compilation (`py_compile`) across all daemons and brokers.
-2. Validates Bash script syntax (`bash -n`) across all CLI and Docker scripts.
-3. Validates Docker Compose configuration (`docker compose config --quiet`).
-4. Executes the automated Python unit test suite (`unittest`).
-5. Builds and publishes multi-architecture container images (`linux/amd64`, `linux/arm64`) to the GitHub Container Registry (`ghcr.io/mosabbir-maruf/aiws-cli`).
+| Symptom | Likely Cause | Diagnostic Command | Corrective Action | When to Stop & Escalate |
+|---|---|---|---|---|
+| Daemon exits with `ERROR: WORKSTATION_API_KEY is not configured` (exit 1). | Missing or empty API key in `.env`. | `grep "^WORKSTATION_API_KEY=" .env` | Run `KEY=$(openssl rand -hex 32) && echo "WORKSTATION_API_KEY=$KEY" >> .env`. | If file exists but daemon fails to read, check file permissions (`chmod 600 .env`). |
+| API calls to `127.0.0.1:8000` return `401 Unauthorized`. | Missing or mismatched Bearer token. | Inspect request headers; compare against `.env`. | Send `Authorization: Bearer <key>`. Query string tokens (`?token=`) are rejected. | Do not disable authentication in production. |
+| Port conflict on `8000`, `3000`, `5173`, or `4090`. | Competing process bound to target port. | `sudo lsof -nP -iTCP:<port> -sTCP:LISTEN` | Stop competing process or run `docker compose -f docker/compose.yml down`. | Never kill unknown host processes with `kill -9` without confirming PID ownership. |
+| Git commands fail with `fatal: could not read Username`. | GitHub broker socket missing or service stopped. | `ls -la runtime/github-broker/github.sock` | Start broker: `sudo systemctl restart ai-github-broker` or run `aiws github test`. | If private key is missing (`secrets/github-app.pem`), re-run `aiws github setup`. |
+| `aiws state import` fails with `State archive contains unsafe or unexpected files`. | Archive contains path traversal (`../`) or unexpected files. | `tar -tzf <archive>` | Ensure archive was created via `aiws state export`. Rollback preserves prior state automatically. | Verify archive structure matches `manifest`, `.env`, and `dsh/*`. |
+| Container fails to start (`Error response from daemon`). | Docker stopped, corrupted mount path, or RAM exhausted. | `systemctl status docker` and `docker compose -f docker/compose.yml config` | Ensure Docker is active. Run `docker compose -f docker/compose.yml down -v` and retry `aiws start`. | If Docker daemon crashes repeatedly, inspect disk space (`df -h`) and `journalctl -u docker`. |
+| Dev server runs but browser shows `Invalid Host Header`. | Dev server rejects incoming tunnel hostname. | `echo $ALLOWED_HOSTS` | Add tunnel hostname to `ALLOWED_HOSTS` in `.env`: `ALLOWED_HOSTS=app.example.com`. | Do not set `ALLOWED_HOSTS=*` on sensitive production origins. |
 
 ---
 
-## Operational Runbook
+## 9. Security Model & Trust Boundaries
 
-### Routine Service Management
+### Container Hardening Controls
+
+The workstation container runs untrusted dependencies (e.g., `npm install`, project dev servers, agent scripts):
+
+- **Non-Root Execution:** Runs strictly as user `sandbox` (UID `1001`, GID `1001`).
+- **Dropped Capabilities:** `cap_drop: [ALL]`. No Linux capabilities are retained.
+- **No Privilege Escalation:** `security_opt: [no-new-privileges:true]`. Prevents `setuid` binaries from gaining elevated privileges.
+- **Resource Constraints:** Hard limit of 512 MB memory, 1.5 CPUs, and 256 PIDs to mitigate fork bombs.
+- **Secure `/tmp`:** Mounted as a `tmpfs` with `rw,noexec,nosuid,size=128m`.
+- **No Host Docker Socket or SSH Keys:** Neither `/var/run/docker.sock` nor `~/.ssh` is ever mounted into the container.
+- **Socket Directory Mounted Read-Only:** The broker directory `/run/ai-github-broker` is mounted `:ro` so the container cannot delete, overwrite, or tamper with socket files.
+
+### Known Trust Boundaries & Operator Responsibilities
+
+1. **Active Project Script Access (Important Known Boundary):**
+   - The container mounts the broker socket so that in-container Git can clone and push code. Any process running inside the container can connect to `/run/ai-github-broker/github.sock` and request temporary installation tokens for repositories granted to the GitHub App.
+   - The container also mounts `runtime/dsh` for agent workflows. Dependencies in `/workspace` running as user `sandbox` can read files in `~/.dsh` (including model API keys).
+   - **Operator Action:** Only clone and execute repositories whose dependency trees you trust. Scope GitHub App installation permissions strictly to necessary repositories.
+2. **Daemon Access and Network Binding:**
+   - The control daemon listener binds to `127.0.0.1:8000`. **Never rebind to `0.0.0.0`**.
+   - Sudo password transport over HTTP is rejected with `403 Forbidden`.
+   - Host commands run in isolated process groups (`start_new_session=True`). On timeout, the entire process group is terminated with `os.killpg`.
+3. **SSRF & DNS Rebinding Protection:**
+   - In model discovery, target URLs are resolved and validated to block link-local (`169.254.0.0/16`), cloud metadata (`metadata.google.internal`), multicast, reserved, and private LAN ranges.
+   - The client pins the socket connection directly to the validated IP to eliminate DNS rebinding, and automatic HTTP redirects are disabled. Local loopback (`127.0.0.1`, `::1`) is preserved for local model runtimes.
+4. **File Permissions Checklist:**
+   ```text
+   chmod 600 .env
+   chmod 700 secrets/
+   chmod 600 secrets/github-app.pem
+   chmod 700 runtime/
+   chmod 700 runtime/dsh/
+   chmod 600 runtime/dsh/ui-providers.json
+   ```
+
+Consult [SECURITY.md](SECURITY.md) for full threat modeling and coordinated disclosure details.
+
+---
+
+## 10. Development & Verification
+
+### Running Automated Test Suites
+
+Verify backend components locally:
 
 ```bash
-# Check daemon and broker status
-systemctl status aiws-daemon ai-github-broker
+# 1. Run Python unit & integration tests (21 tests covering auth, limits, SSRF, state transfer, SSE)
+python3 -m unittest discover tests
 
-# Restart daemon after configuration updates
-sudo systemctl restart aiws-daemon
+# 2. Validate Python syntax across daemons and brokers
+python3 -m py_compile daemon/server.py broker/github_broker.py scripts/github-app-credential-helper
 
-# Stream live daemon logs
-journalctl -u aiws-daemon -f
+# 3. Validate Bash script syntax across all CLI scripts
+bash -n install.sh update.sh uninstall.sh scripts/aiws scripts/lib/*.sh docker/*.sh
+
+# 4. Verify Docker Compose configuration
+docker compose -f docker/compose.yml config --quiet
 ```
 
-### Pre-Flight Operations Checklist
+### API Contract Specification
 
-- [ ] `.env` permissions are `0600` (`stat -c '%a %n' .env` returns `600`).
-- [ ] `WORKSTATION_API_KEY` is populated with a strong 32-byte hexadecimal key.
-- [ ] `docker compose -f docker/compose.yml config --quiet` passes without errors.
-- [ ] Automated tests pass (`python3 -m unittest discover tests`).
-- [ ] Local health check responds with HTTP 200:
-  ```bash
-  API_KEY=$(grep '^WORKSTATION_API_KEY=' .env | cut -d= -f2)
-  curl -fsS -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8000/api/health
-  ```
+The host control daemon implements a canonical OpenAPI 3.1 contract vendored at [`contracts/openapi.yaml`](contracts/openapi.yaml). It defines exact route methods, request/response schemas, body size limits, and standard error formats consumed by the companion web console.
 
 ---
 
-## Troubleshooting
+## 11. Uninstallation & References
 
-| Observed Symptom | Likely Cause | Diagnostic Check | Corrective Action | When to Stop & Escalate |
-|---|---|---|---|---|
-| Daemon exits with `ERROR: WORKSTATION_API_KEY is not configured` (exit 1). | `WORKSTATION_API_KEY` missing or empty in `.env`. | `grep "^WORKSTATION_API_KEY=" .env` | Run `KEY=$(openssl rand -hex 32) && echo "WORKSTATION_API_KEY=$KEY" >> .env`. | If file exists but daemon fails to read, check permissions (`chmod 600 .env`). |
-| API calls to `127.0.0.1:8000` return `401 Unauthorized`. | Missing, mismatched, or malformed `Authorization: Bearer` header. | Inspect client request headers; compare against `.env`. | Pass `Authorization: Bearer <key>`. Query string tokens (`?token=`) are rejected. | Do not disable authentication in production. |
-| Port conflict on `8000`, `3000`, `5173`, or `4090`. | Competing process or stale container bound to the port. | `sudo lsof -nP -iTCP:<port> -sTCP:LISTEN` | Stop competing process or run `docker compose -f docker/compose.yml down`. | Never kill unknown host processes with `kill -9` without confirming PID ownership. |
-| Git commands fail with `fatal: could not read Username`. | GitHub broker socket missing or service stopped. | `ls -la runtime/github-broker/github.sock` and `aiws github status` | Start service: `sudo systemctl restart ai-github-broker` or run `aiws github test`. | If private key is missing (`secrets/github-app.pem`), re-upload PEM and run `aiws github setup`. |
-| `aiws state import` fails with `State archive contains unsafe or unexpected files`. | Archive contains path traversal (`../`), absolute paths, or unapproved files. | `tar -tzf <archive>` | Ensure archive was created via `aiws state export`. Rollback preserves prior state automatically. | Verify archive structure matches `manifest`, `.env`, and `dsh/*`. |
-| Container fails to start (`Error response from daemon`). | Corrupted mount path, Docker daemon stopped, or RAM exhausted. | `systemctl status docker` and `docker compose -f docker/compose.yml config` | Ensure Docker is active. Run `docker compose -f docker/compose.yml down -v` and retry `aiws start`. | If Docker daemon crashes repeatedly, inspect disk space (`df -h`) and `journalctl -u docker`. |
-| Development server runs but browser shows `Invalid Host Header`. | Framework dev server rejects incoming tunnel hostname. | `echo $ALLOWED_HOSTS` | Add tunnel hostname to `ALLOWED_HOSTS` in `.env`: `ALLOWED_HOSTS=app.example.com`. | Do not set `ALLOWED_HOSTS=*` on sensitive production origins. |
-| SSE log stream terminates unexpectedly. | Process was reaped or client connection disconnected. | `aiws app status` | Ensure target application is running before streaming logs (`aiws run`). | If daemon crashes during streaming, check daemon log file. |
+### Clean Uninstallation
 
----
-
-## Security Checklist
-
-Before exposing any service or sharing access:
-
-- [ ] `WORKSTATION_API_KEY` is generated and kept secret in `.env`.
-- [ ] `.env` and `secrets/github-app.pem` have mode `0600`.
-- [ ] Daemon is bound strictly to `127.0.0.1:8000`.
-- [ ] Container runs with `cap_drop: [ALL]` and `no-new-privileges: true`.
-- [ ] Docker socket `/var/run/docker.sock` is **never** mounted.
-- [ ] Host `~/.ssh` is **never** mounted into containers.
-- [ ] Unrestricted sudo (`NOPASSWD: ALL`) is absent from `/etc/sudoers.d/aiws`.
-
----
-
-## Design Decisions
-
-- **One Workstation, Many Projects:** Common developer tools live in the container image; project working trees stay on the host under `~/projects/` and mount individually.
-- **Active-Project-Only Mount:** Only the selected repository is mounted to `/workspace`, preventing untrusted scripts from accessing other project repositories.
-- **Brokered GitHub Credentials:** GitHub App authentication is brokered via Unix socket, avoiding personal access tokens (PATs) or host SSH keys inside the container.
-- **Persistent DSH State Outside Container:** DSH conversation memory and settings live in `runtime/dsh/` on the host, surviving container rebuilds and image updates.
-- **Loopback-Bound Services:** Ports are bound strictly to `127.0.0.1`, requiring explicit SSH port forwarding or authenticated Cloudflare Tunnels for access.
-
----
-
-## Quick Reference
-
-```text
-PROJECTS
-  aiws add <github-url>
-  aiws remove <project>
-  aiws list
-  aiws use <project>
-
-CONTAINER & APP
-  aiws start
-  aiws stop
-  aiws restart
-  aiws status
-  aiws shell
-  aiws run
-  aiws app stop
-  aiws app restart
-  aiws app status
-  aiws app logs
-
-GIT
-  aiws diff
-  aiws pull
-  aiws push "commit message"
-
-AGENT HARNESS
-  aiws harness start
-  aiws harness stop
-  aiws harness restart
-  aiws harness status
-  aiws dsh version
-  aiws dsh update [version]
-
-PREVIEW & TUNNEL
-  aiws preview
-  aiws tunnel setup
-  aiws tunnel sync [port]
-  aiws tunnel status
-  aiws tunnel logs
-
-MAINTENANCE
-  aiws doctor
-  aiws cache prune
-  aiws state export
-  aiws state import <archive>
-  aiws upgrade
-  aiws uninstall
-```
-
----
-
-## Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on development workflow, branch naming, coding standards, shell scripting guidelines, and validation requirements before opening a pull request.
-
----
-
-## Security
-
-Security is foundational to AIWS. To report a security vulnerability or learn more about our container isolation boundaries, credential helper architecture, and defense-in-depth model, please consult [SECURITY.md](SECURITY.md).
-
----
-
-## License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for the full license text.
-
----
-
-## Maintainer
-
-Developed and maintained by [**Mosabbir Maruf**](https://github.com/mosabbir-maruf).
-
-[![GitHub Profile](https://img.shields.io/badge/GitHub-mosabbir--maruf-181717?style=flat&logo=github)](https://github.com/mosabbir-maruf)
-
----
-
-## Maintainer Notes
-
-This repository is the source of truth for the workstation infrastructure and operator tooling.
-
-Keep the following out of Git:
-- Host runtime state (`runtime/`).
-- Project working copies (`~/projects/`).
-- `.env`.
-- Private keys (`secrets/`).
-- DSH credentials (`runtime/dsh/.credentials.yaml`).
-- Temporary files and build caches.
-
-Use GitHub for project source code and the state export mechanism (`aiws state export`) for DSH and workstation state recovery.
-
----
-
-## Uninstallation
-
-To remove AIWS, including background services, Docker containers, global CLI symlinks, caches, and runtime state:
+To permanently remove background services, Docker containers, global CLI symlinks, and runtime directories:
 
 ```bash
 aiws uninstall
 ```
 
-*(You can also access the uninstaller directly from the `aiws` interactive dashboard, or run `./uninstall.sh`).*
+*(Alternatively, run `./uninstall.sh`).*
 
-The uninstaller **will not** delete any of your cloned project repositories inside `~/projects`. If you wish to delete them manually, run `rm -rf ~/projects`.
+Your cloned project repositories in `~/projects/` will **not** be deleted. To delete them manually, run `rm -rf ~/projects`.
+
+### Useful References
+
+- [SECURITY.md](SECURITY.md) — Threat model, security boundaries, and vulnerability disclosure policy.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Coding conventions, shell guidelines, and PR requirements.
+- [contracts/openapi.yaml](contracts/openapi.yaml) — Canonical OpenAPI 3.1 daemon API contract.
+- [docs/github-app-setup.md](docs/github-app-setup.md) — Detailed GitHub App configuration walkthrough.
+- [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md) — Remote ingress setup with Cloudflare Zero Trust.
+- [LICENSE](LICENSE) — MIT License.
+
+---
+
+**Maintainer:** Developed and maintained by [**Mosabbir Maruf**](https://github.com/mosabbir-maruf).
