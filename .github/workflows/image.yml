@@ -31,6 +31,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install PyJWT[crypto]
+
+      - name: Run Python and Bash verification checks
+        run: |
+          python3 -m py_compile daemon/server.py broker/github_broker.py scripts/github-app-credential-helper
+          bash -n install.sh update.sh uninstall.sh scripts/aiws scripts/lib/*.sh docker/*.sh docker/github-app-credential-helper
+          docker compose -f docker/compose.yml config --quiet
+          python3 -m unittest discover tests
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
         with:

@@ -27,12 +27,14 @@ if command -v docker >/dev/null 2>&1; then
     fi
 fi
 
-echo "2/5 Removing background services..."
+echo "2/5 Removing background services and security policies..."
 if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl stop aiws-daemon github-broker 2>/dev/null || true
-    sudo systemctl disable aiws-daemon github-broker 2>/dev/null || true
+    sudo systemctl stop aiws-daemon ai-github-broker github-broker 2>/dev/null || true
+    sudo systemctl disable aiws-daemon ai-github-broker github-broker 2>/dev/null || true
     sudo rm -f /etc/systemd/system/aiws-daemon.service
+    sudo rm -f /etc/systemd/system/ai-github-broker.service
     sudo rm -f /etc/systemd/system/github-broker.service
+    sudo rm -f /etc/sudoers.d/aiws
     sudo systemctl daemon-reload 2>/dev/null || true
 fi
 

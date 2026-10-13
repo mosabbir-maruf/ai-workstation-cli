@@ -59,7 +59,23 @@ set_env() {
 }
 
 load_env_quiet() {
-    [[ -f "$ENV_FILE" ]] && source "$ENV_FILE" || true
+    if declare -F load_env_literal >/dev/null 2>&1; then
+        load_env_literal "$ENV_FILE"
+    elif [[ -f "$ENV_FILE" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+            [[ -z "$line" || "$line" =~ ^# ]] && continue
+            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                local k="${BASH_REMATCH[1]}"
+                local v="${BASH_REMATCH[2]}"
+                [[ "$v" =~ ^\'(.*)\'$ ]] && v="${BASH_REMATCH[1]}"
+                [[ "$v" =~ ^\"(.*)\"$ ]] && v="${BASH_REMATCH[1]}"
+                printf -v "$k" '%s' "$v"
+                export "$k"
+            fi
+        done < "$ENV_FILE"
+    fi
 }
 
 valid_port() {

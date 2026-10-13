@@ -10,20 +10,26 @@ Port: 8000 (default)
 
 import asyncio
 import errno
+import http.client
+import ipaddress
 import json
 import os
 import platform
 import re
 import secrets
+import selectors
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import urllib.request
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
@@ -62,7 +68,7 @@ _ACTIVE_SSE_PROCS = set()
 
 
 def _reap_zombies_and_leaked_streams():
-    """Reaps zombie child processes and terminates leaked log-tail subprocesses in pure Python (0 forks) to prevent Errno 11 (EAGAIN)."""
+    """Reaps zombie child processes in pure Python without terminating unrelated user processes."""
     try:
         while True:
             pid, _ = os.waitpid(-1, os.WNOHANG)
@@ -71,31 +77,106 @@ def _reap_zombies_and_leaked_streams():
     except Exception:
         pass
 
-    for proc in list(_ACTIVE_SSE_PROCS):
-        try:
-            if proc.returncode is None:
-                proc.kill()
-        except Exception:
-            pass
-    _ACTIVE_SSE_PROCS.clear()
 
-    my_uid = os.getuid() if hasattr(os, "getuid") else None
-    if Path("/proc").is_dir():
+def is_safe_model_url(url_str: str) -> bool:
+    """Validates that a model provider URL does not target link-local, private LAN, or cloud metadata endpoints."""
+    try:
+        parsed = urlparse(url_str)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname_lower = hostname.lower()
+        if hostname_lower in ("metadata.google.internal", "instance-data", "169.254.169.254"):
+            return False
         try:
-            for entry in os.scandir("/proc"):
-                if not entry.name.isdigit():
+            addrinfo = socket.getaddrinfo(hostname, None)
+            for item in addrinfo:
+                ip_str = item[4][0].split("%")[0]
+                ip_obj = ipaddress.ip_address(ip_str)
+                if ip_obj.is_loopback:
                     continue
-                try:
-                    if my_uid is not None and entry.stat().st_uid != my_uid:
-                        continue
-                    with open(f"/proc/{entry.name}/cmdline", "rb") as f:
-                        cmdline = f.read().replace(b"\x00", b" ").decode("utf-8", errors="ignore")
-                    if "tail -n 80 -F" in cmdline or "docker logs --tail 80 -f" in cmdline:
-                        os.kill(int(entry.name), signal.SIGKILL)
-                except Exception:
-                    pass
+                if ip_obj.is_link_local or ip_obj.is_multicast or ip_obj.is_reserved or ip_obj.is_private:
+                    return False
         except Exception:
-            pass
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def fetch_safe_model_json(test_url: str, headers: dict = None, timeout: float = 5.0) -> dict:
+    """Fetches model JSON using socket IP pinning and no-redirect enforcement to eliminate DNS rebinding and SSRF."""
+    parsed = urlparse(test_url)
+    if parsed.scheme not in ("http", "https"):
+        return {}
+    hostname = parsed.hostname
+    if not hostname:
+        return {}
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except Exception:
+        return {}
+
+    validated_ip = None
+    for item in addrinfo:
+        ip_str = item[4][0].split("%")[0]
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+        except Exception:
+            return {}
+
+        if ip_obj.is_loopback:
+            validated_ip = ip_str
+            continue
+        if ip_obj.is_link_local or ip_obj.is_multicast or ip_obj.is_reserved or ip_obj.is_private:
+            return {}
+        if validated_ip is None:
+            validated_ip = ip_str
+
+    if not validated_ip:
+        return {}
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path += f"?{parsed.query}"
+
+    req_headers = {"User-Agent": "aiws/1.0", "Accept": "application/json", "Host": hostname}
+    if headers:
+        for k, v in headers.items():
+            if k.lower() not in ("host", "connection", "transfer-encoding", "content-length"):
+                req_headers[k] = v
+
+    try:
+        sock = socket.create_connection((validated_ip, port), timeout=timeout)
+        sock.settimeout(timeout)
+
+        if parsed.scheme == "https":
+            ctx = ssl.create_default_context()
+            sock = ctx.wrap_socket(sock, server_hostname=hostname)
+            conn = http.client.HTTPSConnection(hostname, port)
+        else:
+            conn = http.client.HTTPConnection(hostname, port)
+
+        conn.sock = sock
+        conn.request("GET", path, headers=req_headers)
+        res = conn.getresponse()
+
+        if res.status in (301, 302, 303, 307, 308):
+            conn.close()
+            return {}
+
+        raw_bytes = res.read(1024 * 1024)
+        conn.close()
+
+        if res.status == 200 and raw_bytes:
+            return json.loads(raw_bytes.decode("utf-8", errors="replace"))
+        return {}
+    except Exception:
+        return {}
 
 
 def read_env() -> dict:
@@ -131,27 +212,85 @@ def _run_cmd_sync(cmd: list, timeout: float = 30.0, input_data: str = None) -> t
     last_err = ""
     for attempt in range(4):
         try:
-            run_kwargs = {
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-                "timeout": timeout,
-                "cwd": str(ROOT),
-            }
-            if input_data is not None:
-                run_kwargs["input"] = input_data
-            else:
-                run_kwargs["stdin"] = subprocess.DEVNULL
+            p = subprocess.Popen(
+                actual_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
+                text=True,
+                cwd=str(ROOT),
+                start_new_session=True,
+            )
 
-            res = subprocess.run(actual_cmd, **run_kwargs)
-            out_str = res.stdout.strip()
-            if res.returncode != 0 and ("Errno 11" in out_str or "Resource temporarily unavailable" in out_str) and attempt < 3:
+            # Stream-bound stdout capture with non-blocking selector and process-group isolation
+            MAX_CMD_OUTPUT = 1024 * 1024  # 1 MB maximum output capture
+            chunks = []
+            total_read = 0
+            truncated = False
+
+            t_end = time.time() + timeout
+            if input_data is not None and p.stdin:
+                try:
+                    p.stdin.write(input_data)
+                    p.stdin.flush()
+                except Exception:
+                    pass
+                try:
+                    p.stdin.close()
+                except Exception:
+                    pass
+
+            sel = selectors.DefaultSelector()
+            sel.register(p.stdout, selectors.EVENT_READ)
+            timed_out = False
+
+            try:
+                while True:
+                    rem_time = t_end - time.time()
+                    if rem_time <= 0:
+                        timed_out = True
+                        try:
+                            os.killpg(p.pid, signal.SIGKILL)
+                        except Exception:
+                            p.kill()
+                        p.wait()
+                        return False, f"Command timed out after {timeout}s: {' '.join(cmd)}"
+
+                    events = sel.select(timeout=min(0.2, max(0.01, rem_time)))
+                    if not events:
+                        if p.poll() is not None:
+                            break
+                        continue
+
+                    chunk = p.stdout.read(65536)
+                    if not chunk:
+                        break
+
+                    if total_read < MAX_CMD_OUTPUT:
+                        allowed = MAX_CMD_OUTPUT - total_read
+                        chunks.append(chunk[:allowed])
+                        total_read += min(len(chunk), allowed)
+                        if len(chunk) > allowed:
+                            truncated = True
+                    else:
+                        truncated = True
+            finally:
+                sel.close()
+                try:
+                    p.stdout.close()
+                except Exception:
+                    pass
+
+            p.wait(timeout=max(1.0, t_end - time.time()))
+            out_str = "".join(chunks).strip()
+            if truncated:
+                out_str += "\n...[OUTPUT TRUNCATED: Exceeded 1MB buffer limit]"
+
+            if p.returncode != 0 and ("Errno 11" in out_str or "Resource temporarily unavailable" in out_str) and attempt < 3:
                 _reap_zombies_and_leaked_streams()
                 time.sleep(0.25 * (attempt + 1))
                 continue
-            return res.returncode == 0, out_str
-        except subprocess.TimeoutExpired:
-            return False, f"Command timed out after {timeout}s: {' '.join(cmd)}"
+            return p.returncode == 0, out_str
         except OSError as e:
             last_err = str(e)
             if (e.errno == errno.EAGAIN or "Errno 11" in last_err or "Resource temporarily unavailable" in last_err) and attempt < 3:
@@ -656,26 +795,47 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         method = parts[0].upper()
         path = parts[1]
 
-        # Read headers
+        # Enforce maximum header line / count limits
         headers = {}
         content_length = 0
+        header_count = 0
         while True:
+            if header_count > 64:
+                writer.write(b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                await writer.drain()
+                writer.close()
+                return
+
             header_line = await asyncio.wait_for(reader.readline(), timeout=15.0)
             if not header_line or header_line == b"\r\n" or header_line == b"\n":
                 break
+            if len(header_line) > 8192:
+                writer.write(b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                await writer.drain()
+                writer.close()
+                return
+
+            header_count += 1
             h_str = header_line.decode("utf-8", errors="replace").strip()
             if ":" in h_str:
                 hk, hv = h_str.split(":", 1)
-                headers[hk.strip().lower()] = hv.strip()
-                if hk.strip().lower() == "content-length":
-                    try:
-                        content_length = int(hv.strip())
-                    except ValueError:
-                        pass
+                hk_clean = hk.strip().lower()
+                hv_clean = hv.strip()
+                if hk_clean == "content-length":
+                    if "content-length" in headers:
+                        content_length = -1
+                    else:
+                        try:
+                            content_length = int(hv_clean)
+                        except ValueError:
+                            content_length = -1
+                headers[hk_clean] = hv_clean
 
-        body = b""
-        if content_length > 0:
-            body = await asyncio.wait_for(reader.readexactly(content_length), timeout=30.0)
+        if "transfer-encoding" in headers or content_length < 0:
+            writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            writer.close()
+            return
 
         # Handle CORS OPTIONS
         if method == "OPTIONS":
@@ -690,20 +850,13 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             writer.close()
             return
 
-        parsed_json = {}
-        if body:
-            try:
-                parsed_json = json.loads(body.decode("utf-8", errors="replace"))
-            except Exception:
-                pass
-
         # Parse Clean Path
         clean_path = path.split("?")[0].rstrip("/")
 
-        # Bearer Token / API Key Authentication Gate
+        # Bearer Token / API Key Authentication Gate — performed BEFORE reading request body
         configured_key = get_configured_api_key()
-        if configured_key:
-            # Check Authorization: Bearer <key> or X-API-Key or ?token= (for SSE/downloads)
+        allow_insecure = os.environ.get("AIWS_INSECURE_LOCAL", "").strip() == "1"
+        if configured_key or not allow_insecure:
             auth_header = headers.get("authorization", "")
             x_api_key = headers.get("x-api-key", "")
             provided_token = ""
@@ -712,15 +865,8 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 provided_token = auth_header[7:].strip()
             elif x_api_key:
                 provided_token = x_api_key.strip()
-            elif "?" in path:
-                # Support query param for EventSource / direct browser download
-                try:
-                    q_dict = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x)
-                    provided_token = q_dict.get("token", "").strip()
-                except Exception:
-                    pass
 
-            is_valid = secrets.compare_digest(provided_token, configured_key)
+            is_valid = bool(configured_key) and secrets.compare_digest(provided_token, configured_key)
             if not is_valid:
                 err_resp = json.dumps({"ok": False, "output": "Unauthorized: Invalid or missing API key."}).encode("utf-8")
                 resp_headers = (
@@ -736,6 +882,45 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 await writer.drain()
                 writer.close()
                 return
+
+        # Cap request body size (250MB for state archives, 5MB default)
+        MAX_BODY_SIZE = 250 * 1024 * 1024 if "/api/state/import" in path else 5 * 1024 * 1024
+        if content_length > MAX_BODY_SIZE:
+            writer.write(b"HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            writer.close()
+            return
+
+        body = b""
+        if content_length > 0:
+            body = await asyncio.wait_for(reader.readexactly(content_length), timeout=60.0)
+
+        # Parse JSON payload with validation for application/json requests
+        parsed_json = {}
+        if body:
+            content_type = headers.get("content-type", "").lower()
+            if "application/json" in content_type:
+                try:
+                    parsed_json = json.loads(body.decode("utf-8", errors="replace"))
+                    if not isinstance(parsed_json, dict):
+                        raise ValueError("Payload must be a JSON object.")
+                except Exception:
+                    err_resp = json.dumps({"ok": False, "output": "Malformed JSON payload."}).encode("utf-8")
+                    resp_headers = (
+                        "HTTP/1.1 400 Bad Request\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        f"Content-Length: {len(err_resp)}\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode("utf-8")
+                    writer.write(resp_headers + err_resp)
+                    await writer.drain()
+                    writer.close()
+                    return
+            else:
+                try:
+                    parsed_json = json.loads(body.decode("utf-8", errors="replace"))
+                except Exception:
+                    pass
 
         # SSE Streaming endpoints
         if clean_path in ["/api/logs/app", "/api/logs/workstation", "/api/tunnel/logs"]:
@@ -1033,14 +1218,33 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 clean_cmd = raw_command
                 if clean_cmd.startswith("git "):
                     clean_cmd = clean_cmd[4:].strip()
-                invalidate_cache()
-                cmd = ["sh", "-c", f'git -C "$1" {clean_cmd}', "sh", active_proj_path]
-                ok, out = await run_cmd_async(cmd, timeout=60.0)
-                invalidate_cache()
-                resp_data = {
-                    "ok": ok,
-                    "output": out or ("Command executed successfully with zero output." if ok else "Command failed with no output."),
-                }
+                import shlex
+                try:
+                    split_args = shlex.split(clean_cmd)
+                except Exception as e:
+                    status_code = 400
+                    resp_data = {"ok": False, "output": f"Invalid command syntax: {e}"}
+                else:
+                    ALLOWED_GIT_COMMANDS = {
+                        "status", "diff", "log", "branch", "checkout", "switch",
+                        "fetch", "pull", "push", "commit", "add", "reset", "stash",
+                        "remote", "tag", "show", "rev-parse", "config"
+                    }
+                    if not split_args or split_args[0] not in ALLOWED_GIT_COMMANDS:
+                        status_code = 403
+                        resp_data = {
+                            "ok": False,
+                            "output": f"Git subcommand '{split_args[0] if split_args else ''}' is not permitted.",
+                        }
+                    else:
+                        invalidate_cache()
+                        cmd = ["git", "-C", active_proj_path] + split_args
+                        ok, out = await run_cmd_async(cmd, timeout=60.0)
+                        invalidate_cache()
+                        resp_data = {
+                            "ok": ok,
+                            "output": out or ("Command executed successfully with zero output." if ok else "Command failed with no output."),
+                        }
         elif clean_path == "/api/git/config":
             env = read_env()
             active_proj = env.get("ACTIVE_PROJECT", "")
@@ -1172,7 +1376,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         ).isoformat()
                         if target_file == DSH_SETTINGS_FILE and "api_providers" in content:
                             DSH_UI_PROVIDERS_FILE.write_text(content, encoding="utf-8")
-                            DSH_UI_PROVIDERS_FILE.chmod(0o644)
+                            DSH_UI_PROVIDERS_FILE.chmod(0o600)
                     except Exception as e:
                         content = f"# Error reading settings: {e}"
                 if not content.strip():
@@ -1199,13 +1403,23 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                             except Exception:
                                 current_data = {}
 
+                        # Preserve existing api_key if incoming is masked or placeholder
+                        if isinstance(new_data.get("api_providers"), dict) and isinstance(current_data.get("api_providers"), dict):
+                            for p_name, p_val in new_data["api_providers"].items():
+                                if isinstance(p_val, dict):
+                                    in_key = p_val.get("api_key", "")
+                                    cur_key = current_data["api_providers"].get(p_name, {}).get("api_key", "")
+                                    if cur_key and (not in_key or in_key == "********" or in_key.startswith("***") or in_key == "REDACTED"):
+                                        p_val["api_key"] = cur_key
+                        new_content = json.dumps(new_data, indent=2)
+
                         incoming_norm = normalize_providers_dict(new_data)
                         current_norm = normalize_providers_dict(current_data)
                         has_changed = (incoming_norm != current_norm)
 
                         DSH_DIR.mkdir(parents=True, exist_ok=True)
                         DSH_UI_PROVIDERS_FILE.write_text(new_content, encoding="utf-8")
-                        DSH_UI_PROVIDERS_FILE.chmod(0o644)
+                        DSH_UI_PROVIDERS_FILE.chmod(0o600)
 
                         overview = await get_fast_overview_async()
                         container_running = overview["workstation"]["running"]
@@ -1417,14 +1631,8 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         resp_data = {"ok": ok, "output": out}
                 else:
                     if sudo_password:
-                        cmd_str = command[5:].strip() if command.startswith("sudo ") else command
-                        cmd = ["sudo", "-S", "-p", "", "bash", "-lc", cmd_str]
-                        ok, out = await run_cmd_async(cmd, timeout=90.0, input_data=f"{sudo_password}\n")
-                        cleaned_out = out.strip()
-                        requires_sudo = False
-                        if not ok and ("incorrect password" in cleaned_out.lower() or "sorry, try again" in cleaned_out.lower()):
-                            requires_sudo = True
-                        resp_data = {"ok": ok, "output": cleaned_out, "requiresSudo": requires_sudo}
+                        status_code = 403
+                        resp_data = {"ok": False, "output": "Transporting sudo passwords via HTTP API is disabled for security."}
                     else:
                         cmd = ["bash", "-lc", command]
                         ok, out = await run_cmd_async(cmd, timeout=90.0)
@@ -1474,12 +1682,26 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         elif clean_path == "/api/state/download":
             query_file = ""
             if "?" in path:
-                query_file = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x).get("file", "")
+                try:
+                    q_dict = dict(x.split("=", 1) for x in path.split("?")[1].split("&") if "=" in x)
+                    query_file = q_dict.get("file", "").strip()
+                except Exception:
+                    query_file = ""
+
+            target = None
             if not query_file:
                 backups = sorted(BACKUPS_DIR.glob("aiws-state-*.tar.gz"), reverse=True)
                 target = backups[0] if backups else None
             else:
-                target = (BACKUPS_DIR / Path(query_file).name).resolve()
+                clean_filename = Path(query_file).name
+                if (
+                    clean_filename
+                    and not clean_filename.startswith(".")
+                    and clean_filename.endswith(".tar.gz")
+                ):
+                    candidate = (BACKUPS_DIR / clean_filename).resolve()
+                    if candidate.parent == BACKUPS_DIR.resolve() and candidate.is_file():
+                        target = candidate
 
             if target and target.is_file():
                 file_bytes = target.read_bytes()
@@ -1488,6 +1710,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                     f"Content-Type: application/gzip\r\n"
                     f"Content-Disposition: attachment; filename=\"{target.name}\"\r\n"
                     f"Content-Length: {len(file_bytes)}\r\n"
+                    f"Cache-Control: private, no-store\r\n"
                     f"Access-Control-Allow-Origin: *\r\n\r\n".encode("utf-8")
                 )
                 writer.write(file_bytes)
@@ -1501,9 +1724,17 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         elif clean_path == "/api/state/import":
             BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
             temp_archive = BACKUPS_DIR / f"import-{int(time.time())}.tar.gz"
-            temp_archive.write_bytes(body)
-            ok, out = await run_cmd_async(["aiws", "state", "import", str(temp_archive)], timeout=60.0)
-            resp_data = {"ok": ok, "output": out}
+            try:
+                temp_archive.write_bytes(body)
+                temp_archive.chmod(0o600)
+                ok, out = await run_cmd_async(["aiws", "state", "import", str(temp_archive)], timeout=60.0)
+                resp_data = {"ok": ok, "output": out}
+            finally:
+                if temp_archive.is_file():
+                    try:
+                        temp_archive.unlink()
+                    except Exception:
+                        pass
 
         elif clean_path == "/api/models/fetch":
             provider = parsed_json.get("provider", "custom")
@@ -1545,25 +1776,20 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                         headers["Authorization"] = f"Bearer {api_key}"
 
                     for test_url in urls_to_try:
-                        try:
-                            req = Request(test_url, headers=headers)
-                            with urlopen(req, timeout=5) as res:
-                                data = json.loads(res.read().decode("utf-8", errors="replace"))
-                                if isinstance(data, dict):
-                                    if "data" in data and isinstance(data["data"], list):
-                                        models = [m.get("id") or m.get("name") for m in data["data"] if isinstance(m, dict) and (m.get("id") or m.get("name"))]
-                                        if models:
-                                            break
-                                    elif "models" in data and isinstance(data["models"], list):
-                                        models = [m.get("name") or m.get("model") for m in data["models"] if isinstance(m, dict) and (m.get("name") or m.get("model"))]
-                                        if models:
-                                            break
-                                elif isinstance(data, list):
-                                    models = [m.get("id") or m.get("name") if isinstance(m, dict) else str(m) for m in data]
-                                    if models:
-                                        break
-                        except Exception:
-                            continue
+                        data = fetch_safe_model_json(test_url, headers=headers, timeout=5.0)
+                        if isinstance(data, dict):
+                            if "data" in data and isinstance(data["data"], list):
+                                models = [m.get("id") or m.get("name") for m in data["data"] if isinstance(m, dict) and (m.get("id") or m.get("name"))]
+                                if models:
+                                    break
+                            elif "models" in data and isinstance(data["models"], list):
+                                models = [m.get("name") or m.get("model") for m in data["models"] if isinstance(m, dict) and (m.get("name") or m.get("model"))]
+                                if models:
+                                    break
+                        elif isinstance(data, list):
+                            models = [m.get("id") or m.get("name") if isinstance(m, dict) else str(m) for m in data]
+                            if models:
+                                break
 
                 elif provider == "deepseek":
                     models = ["deepseek-chat", "deepseek-reasoner"]
@@ -1684,8 +1910,25 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         # Send JSON Response
         body_bytes = json.dumps(resp_data).encode("utf-8")
+        status_phrase = {
+            200: "OK",
+            201: "Created",
+            204: "No Content",
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            413: "Payload Too Large",
+            415: "Unsupported Media Type",
+            431: "Request Header Fields Too Large",
+            499: "Client Closed Request",
+            500: "Internal Server Error",
+            503: "Service Unavailable",
+        }.get(status_code, "OK")
+
         resp_headers = (
-            f"HTTP/1.1 {status_code} OK\r\n"
+            f"HTTP/1.1 {status_code} {status_phrase}\r\n"
             f"Content-Type: application/json; charset=utf-8\r\n"
             f"Content-Length: {len(body_bytes)}\r\n"
             f"Access-Control-Allow-Origin: *\r\n"
@@ -1760,7 +2003,9 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
             if not line:
                 break
             clean_line = line.decode("utf-8", errors="replace").rstrip("\r\n")
-            sse_packet = f"event: message\ndata: {clean_line}\n\n".encode("utf-8")
+            sublines = clean_line.split("\n")
+            data_str = "".join(f"data: {subl}\n" for subl in sublines)
+            sse_packet = f"event: message\n{data_str}\n".encode("utf-8")
             writer.write(sse_packet)
             await writer.drain()
 
@@ -1785,6 +2030,17 @@ async def stream_logs(endpoint: str, writer: asyncio.StreamWriter):
 
 
 async def main():
+    configured_key = get_configured_api_key()
+    allow_insecure = os.environ.get("AIWS_INSECURE_LOCAL", "").strip() == "1"
+    if not configured_key and not allow_insecure:
+        print("ERROR: WORKSTATION_API_KEY is not configured.", file=sys.stderr)
+        print("For security, the daemon refuses to start without an API key.", file=sys.stderr)
+        print("Set WORKSTATION_API_KEY in .env or provide AIWS_INSECURE_LOCAL=1 for local development.", file=sys.stderr)
+        sys.exit(1)
+
+    if not configured_key and allow_insecure:
+        print("WARNING: Running without WORKSTATION_API_KEY because AIWS_INSECURE_LOCAL=1 is set.", file=sys.stderr)
+
     _reap_zombies_and_leaked_streams()
     server = await asyncio.start_server(handle_request, DAEMON_HOST, DAEMON_PORT)
     addr = server.sockets[0].getsockname()

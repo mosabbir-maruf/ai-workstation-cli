@@ -63,12 +63,9 @@ python3 -c 'import venv, ensurepip' >/dev/null 2>&1 ||
 # --------------------------------------------------
 # Sudoers & journal permissions for daemon & CLI
 # --------------------------------------------------
-echo "Configuring sudoers permissions..."
-SUDOERS_FILE="/etc/sudoers.d/aiws"
-echo "$(id -un) ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" >/dev/null
-sudo chmod 0440 "$SUDOERS_FILE"
+echo "Configuring journal permissions..."
 sudo usermod -aG systemd-journal "$(id -un)" 2>/dev/null || true
-echo "✓ Sudoers permissions configured"
+echo "✓ Journal permissions configured (unrestricted NOPASSWD: ALL removed for least-privilege security)"
 
 # --------------------------------------------------
 # Directory structure

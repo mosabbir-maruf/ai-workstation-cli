@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import calendar
 import json
 import os
 import socket
@@ -144,7 +145,7 @@ def get_installation_token():
             )
 
             _token_expires_at = int(
-                time.mktime(expires_struct)
+                calendar.timegm(expires_struct)
             )
         except ValueError:
             _token_expires_at = now + 3600
@@ -218,9 +219,11 @@ def main():
 
     while True:
         connection, _ = server.accept()
+        connection.settimeout(5.0)
 
         try:
             chunks = []
+            total_bytes = 0
 
             while True:
                 data = connection.recv(4096)
@@ -229,8 +232,9 @@ def main():
                     break
 
                 chunks.append(data)
+                total_bytes += len(data)
 
-                if b"\n\n" in data:
+                if b"\n\n" in data or total_bytes > 65536:
                     break
 
             request = b"".join(chunks).decode(

@@ -186,7 +186,7 @@ Secrets must **never** be checked into version control.
 
 ## 13. Host Control Daemon & Docker Security
 
-- **Host Daemon Authentication**: When the web control daemon (`aiws daemon`) is exposed via reverse proxy or Cloudflare Tunnel, `WORKSTATION_API_KEY` must be configured in `.env`. All incoming requests require valid Bearer token authorization verified via constant-time comparison (`secrets.compare_digest`). Unauthenticated requests are rejected with `401 Unauthorized` before executing system calls.
+- **Host Daemon Authentication**: `WORKSTATION_API_KEY` is mandatory in `.env`. All incoming requests require valid Bearer token authorization verified via constant-time comparison (`secrets.compare_digest`). The daemon refuses startup if no key is configured (unless explicit `AIWS_INSECURE_LOCAL=1` is provided). Unauthenticated requests are rejected with `401 Unauthorized` before executing system calls.
 - **Host Daemon Protection**: Access to the host Docker daemon should be restricted to administrative users.
 - **Trusted Images**: Use pinned images (`IMAGE=ghcr.io/mosabbir-maruf/aiws-cli:<commit-sha>`) in production environments rather than mutable `latest` tags.
 - **Local Port Bindings**: Ports configured in `compose.yml` (`3000`, `3001`, `8000`, `4090:4091`) must always bind to `127.0.0.1` on the host, never `0.0.0.0`.
@@ -222,8 +222,17 @@ We believe in responsible, coordinated disclosure:
 
 While AIWS implements robust defense-in-depth, operators should understand its inherent boundaries:
 
-- **Container vs. Hypervisor Isolation**: Docker containers share the host Linux kernel. Container isolation does not provide the same hard boundary as a Type-1 or Type-2 hypervisor against kernel-level privilege escalation (e.g., zero-day kernel vulnerabilities).
+- **Active Project Trust Boundary**:
+  - The workstation container allows the active project to execute node/npm scripts. Malicious code within `/workspace` can access mounted files within the active project directory.
+  - Because `runtime/github-broker` is mounted to allow container Git operations, code running in the container can request temporary installation tokens from the broker for the repositories granted to the GitHub App (the master private key remains protected on the host).
+  - Similarly, `runtime/dsh` is mounted into the container for agent workflows; active project dependencies share the container user and can read mounted runtime DSH API keys. Future defense-in-depth plans include separating untrusted user code execution from the credential-bearing agent container.
+- **SSRF & DNS Rebinding Model**:
+  - Target URLs in model discovery are validated prior to connection by resolving hostnames and blocking link-local (`169.254.0.0/16`), cloud metadata (`metadata.google.internal`), multicast, reserved, and private LAN ranges.
+  - Automatic HTTP redirects are disabled via `SafeNoRedirectHandler` to block redirect-based SSRF.
+  - Standard socket connections are used; true socket-level IP pinning against authoritative DNS rebinding servers would require a dedicated custom socket transport.
+- **Administrative Terminal Boundary**:
+  - The `/api/terminal/exec` endpoint represents an administrative control plane. In production, requests require valid `WORKSTATION_API_KEY` authentication. Transporting root sudo passwords over HTTP is disabled (`403 Forbidden`). Command execution runs in dedicated process groups with timeout group killing.
+- **Container vs. Hypervisor Isolation**: Docker containers share the host Linux kernel. Container isolation does not provide the same hard boundary as a Type-1 or Type-2 hypervisor against kernel-level privilege escalation.
 - **Compromised Host User**: If an attacker gains root or host user access on the VPS, all security boundaries are compromised.
-- **Malicious Code in Active Project**: The workstation container allows the active project to execute node/npm scripts. Malicious packages within `/workspace` can consume allocated container resources or read files within the active project directory.
 - **Third-Party Package Ecosystem**: Vulnerabilities in upstream packages (such as Node.js, DeepSeek Harness, npm packages, or Linux packages) are out of scope unless they stem from AIWS's integration.
 

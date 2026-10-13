@@ -1,0 +1,116 @@
+openapi: 3.1.0
+info:
+  title: AI Workstation Control Plane API
+  version: 1.0.0
+  description: Canonical contract between Next.js frontend proxy and Python host daemon.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Host daemon loopback listener
+components:
+  securitySchemes:
+    DaemonBearerAuth:
+      type: http
+      scheme: bearer
+      description: WORKSTATION_API_KEY required on daemon endpoints.
+  schemas:
+    StandardResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+        output:
+          type: string
+        error:
+          type: string
+    HealthResponse:
+      type: object
+      required:
+        - ok
+        - status
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+        version:
+          type: string
+    StateExportResponse:
+      type: object
+      required:
+        - ok
+        - filename
+        - downloadUrl
+      properties:
+        ok:
+          type: boolean
+        filename:
+          type: string
+        downloadUrl:
+          type: string
+paths:
+  /api/health:
+    get:
+      summary: Daemon health check
+      security:
+        - DaemonBearerAuth: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '401':
+          description: Unauthorized
+  /api/state/export:
+    post:
+      summary: Export state archive
+      security:
+        - DaemonBearerAuth: []
+      responses:
+        '200':
+          description: Archive generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateExportResponse'
+  /api/state/download:
+    get:
+      summary: Download state archive
+      security:
+        - DaemonBearerAuth: []
+      parameters:
+        - name: file
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gzip archive stream
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+  /api/state/import:
+    post:
+      summary: Import state archive
+      security:
+        - DaemonBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/gzip:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'

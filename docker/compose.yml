@@ -24,7 +24,7 @@ services:
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/npm-global:/home/sandbox/.npm-global
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/dsh:/home/sandbox/.dsh
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/app:/run/aiws-cli/app
-      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/github-broker:/run/ai-github-broker
+      - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/github-broker:/run/ai-github-broker:ro
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/runtime/harness:/run/aiws-cli/harness
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/docker/harness.sh:/usr/local/bin/harness.sh:ro
       - ${AIWS_ROOT:-/home/mosabbir/aiws-cli}/docker/app-runner.sh:/usr/local/bin/app-runner.sh:ro
