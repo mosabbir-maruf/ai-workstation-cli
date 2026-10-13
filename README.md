@@ -29,6 +29,9 @@
 ## Table of Contents
 
 1. [Overview & Architecture](#1-overview--architecture)
+   - [Core Capabilities](#core-capabilities)
+   - [Architecture Flow](#architecture-flow)
+   - [Repository File Structure](#repository-file-structure)
 2. [Prerequisites & Supported Platforms](#2-prerequisites--supported-platforms)
 3. [Quick Start](#3-quick-start)
 4. [Configuration Reference](#4-configuration-reference)
@@ -79,6 +82,67 @@ Workstation Container
   └── Credential Helper (`/run/ai-github-broker/github.sock` read-only mount)
 ```
 
+### Repository File Structure
+
+```text
+ai-workstation-cli/
+├── .dockerignore                    # Build context exclusions
+├── .env.example                     # Environment configuration template
+├── .gitignore                       # Ignored runtime files and local secrets
+├── CONTRIBUTING.md                  # Contributor coding and PR guidelines
+├── LICENSE                          # MIT License
+├── README.md                        # Primary architecture & operational runbook
+├── SECURITY.md                      # Security policy & threat boundary specs
+├── install.sh                       # Host installation & systemd setup script
+├── uninstall.sh                     # Idempotent host uninstallation script
+├── update.sh                        # Fast-forward update script
+│
+├── .github/
+│   ├── ISSUE_TEMPLATE/              # Bug and feature issue templates
+│   └── workflows/
+│       └── image.yml                # Automated test & multi-arch image workflow
+│
+├── broker/
+│   └── github_broker.py             # Host-side GitHub App token broker
+│
+├── config/
+│   └── projects.yml                 # Local project configuration registry
+│
+├── contracts/
+│   └── openapi.yaml                 # Canonical OpenAPI 3.1 daemon API contract
+│
+├── daemon/
+│   └── server.py                    # Host HTTP/SSE control bridge daemon (port 8000)
+│
+├── docker/
+│   ├── Dockerfile                   # Node 22 Bookworm Slim multi-arch image
+│   ├── compose.yml                  # Workstation runtime & security definition
+│   ├── entrypoint.sh                # Container bootstrap & DSH link setup
+│   ├── app-runner.sh                # Application supervisor process runner
+│   ├── harness.sh                   # DSH agent engine + TCP bridge supervisor
+│   └── github-app-credential-helper # Container-side credential helper
+│
+├── docs/
+│   ├── assets/                      # Project logo and TUI preview images
+│   ├── cloudflare-tunnel.md         # Remote ingress & Cloudflare Tunnel guide
+│   └── github-app-setup.md          # Step-by-step GitHub App configuration guide
+│
+├── scripts/
+│   ├── aiws                         # Main CLI and interactive Terminal UI (TUI)
+│   ├── github-app-credential-helper # Host-side Git credential helper
+│   └── lib/
+│       ├── github.sh                # GitHub App & broker service helpers
+│       ├── ports.sh                 # Container listening port detector
+│       └── tunnel.sh                # Cloudflare Tunnel helpers
+│
+└── tests/                           # Automated Python unit & integration test suite
+    ├── test_auth.py                 # Fail-closed authentication & permissions tests
+    ├── test_env_safety.py           # Non-executable literal .env parsing tests
+    ├── test_sse_and_process.py      # Output bounding & concurrent SSE tests
+    ├── test_ssrf_and_limits.py      # IP pinning, SSRF & HTTP framing tests
+    └── test_state_transfer.py       # Raw gzip import & byte-identical download tests
+```
+
 ---
 
 ## 2. Prerequisites & Supported Platforms
@@ -112,8 +176,8 @@ Follow these steps in sequence on a clean host to get AIWS running:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git ~/aiws-cli
-cd ~/aiws-cli
+git clone https://github.com/mosabbir-maruf/ai-workstation-cli.git
+cd ai-workstation-cli
 ```
 
 ### Step 2: Initialize Configuration and Generate API Key
