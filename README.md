@@ -7,7 +7,7 @@
 <p align="center">
   <strong>A secure, container-isolated development environment for remote Linux VPS, featuring DeepSeek Harness agent workflows, brokered GitHub authentication, and host control tooling.</strong>
   <br />
-  <em>Companion Web Interface: <a href="https://github.com/mosabbir-maruf/aiws">AIWS Web Dashboard</a></em>
+  <em>Companion Web Interface: <a href="https://github.com/mosabbir-maruf/ai-workstation">AIWS Web Dashboard</a></em>
 </p>
 
 <p align="center">
@@ -426,6 +426,7 @@ Your cloned project repositories in `~/projects/` will **not** be deleted. To de
 
 ### Useful References
 
+- [AIWS Web Dashboard (Frontend)](https://github.com/mosabbir-maruf/ai-workstation) — Companion Next.js web console and operator dashboard.
 - [SECURITY.md](SECURITY.md) — Threat model, security boundaries, and vulnerability disclosure policy.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Coding conventions, shell guidelines, and PR requirements.
 - [contracts/openapi.yaml](contracts/openapi.yaml) — Canonical OpenAPI 3.1 daemon API contract.
