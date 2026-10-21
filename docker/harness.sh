@@ -309,7 +309,11 @@ start_dsh() {
         eval "$env_exports"
     fi
 
-    node --expose-internals "$DSH_BIN" \
+    # DSH can exceed Node's default ~256 MiB heap while parsing its composed
+    # profile. Keep this configurable for different container memory limits.
+    local dsh_heap_mb="${DSH_MAX_OLD_SPACE_SIZE:-320}"
+    NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=${dsh_heap_mb}" \
+        node --expose-internals "$DSH_BIN" \
         "${dsh_args[@]}" >>"$LOG_FILE" 2>&1 &
 
     echo "$!" > "$DSH_PID_FILE"
