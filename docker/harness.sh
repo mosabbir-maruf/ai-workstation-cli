@@ -393,9 +393,9 @@ cmd_start() {
 
     start_dsh
 
-    # Wait up to 6s for DSH to bind port 4090 before starting the bridge.
+    # Wait up to 15s for DSH to bind port 4090 before starting the bridge.
     local dsh_ready=0
-    for _ in {1..60}; do
+    for _ in {1..150}; do
         if (echo >/dev/tcp/127.0.0.1/4090) >/dev/null 2>&1; then
             dsh_ready=1
             break
