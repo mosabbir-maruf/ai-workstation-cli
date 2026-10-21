@@ -402,6 +402,28 @@ cmd_start() {
     if [[ "$dsh_ready" -ne 1 ]]; then
         echo "ERROR: DSH failed to bind port 4090." >&2
         cat "$LOG_FILE" >&2 || true
+
+        # A failed readiness check must not leave the child process orphaned.
+        # Keep the PID file until cleanup has completed so stop/status can
+        # still identify the process while it is being terminated.
+        local dsh_pid=""
+        dsh_pid="$(cat "$DSH_PID_FILE" 2>/dev/null || true)"
+
+        if [[ "$dsh_pid" =~ ^[0-9]+$ ]] && kill -0 "$dsh_pid" 2>/dev/null; then
+            kill -TERM "$dsh_pid" 2>/dev/null || true
+
+            for _ in {1..20}; do
+                if ! kill -0 "$dsh_pid" 2>/dev/null; then
+                    break
+                fi
+                sleep 0.1
+            done
+
+            if kill -0 "$dsh_pid" 2>/dev/null; then
+                kill -KILL "$dsh_pid" 2>/dev/null || true
+            fi
+        fi
+
         rm -f "$DSH_PID_FILE"
         return 1
     fi
